@@ -208,7 +208,8 @@ export interface NovelChapter {
   index: number;          // 章节序号（第N章）
   reel: string;           // 所属卷名，如"正文卷"、"第一卷"
   title: string;          // 章节标题
-  content: string;        // 章节正文内容
+  content: string;        // 章节正文内容（懒加载时为空字符串）
+  wordCount?: number;     // 章节字数（轻量加载时由服务端提供，避免传输全文）
 }
 
 /**

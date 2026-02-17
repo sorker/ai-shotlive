@@ -169,9 +169,10 @@ export function parseNovelToChapters(text: string): NovelChapter[] {
 
 /**
  * 获取章节字数统计
+ * 优先使用 wordCount 字段（轻量加载时服务端提供），否则回退到 content.length
  */
 export function getChapterWordCount(chapter: NovelChapter): number {
-  return chapter.content.length;
+  return chapter.wordCount || chapter.content?.length || 0;
 }
 
 /**
@@ -180,7 +181,7 @@ export function getChapterWordCount(chapter: NovelChapter): number {
 export function getSelectedChaptersWordCount(chapters: NovelChapter[], selectedIds: string[]): number {
   return chapters
     .filter(ch => selectedIds.includes(ch.id))
-    .reduce((sum, ch) => sum + ch.content.length, 0);
+    .reduce((sum, ch) => sum + (ch.wordCount || ch.content?.length || 0), 0);
 }
 
 /**

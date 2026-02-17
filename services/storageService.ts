@@ -1,4 +1,4 @@
-import { ProjectState, AssetLibraryItem } from '../types';
+import { ProjectState, AssetLibraryItem, NovelChapter, NovelEpisode } from '../types';
 import { apiGet, apiPut, apiDelete, apiPost } from './apiClient';
 
 /**
@@ -200,6 +200,66 @@ export const convertImageToBase64 = (file: File): Promise<string> => {
     reader.onerror = () => reject(new Error('图片读取失败'));
     reader.readAsDataURL(file);
   });
+};
+
+// =========================
+// 按需加载：章节与剧集
+// =========================
+
+export interface PaginatedChapters {
+  chapters: NovelChapter[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PaginatedEpisodes {
+  episodes: (NovelEpisode & { scriptLength?: number })[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * 分页获取章节列表（仅标题，不含 content）
+ */
+export const fetchChaptersPaginated = async (
+  projectId: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<PaginatedChapters> => {
+  return apiGet<PaginatedChapters>(`/api/projects/${projectId}/chapters?page=${page}&pageSize=${pageSize}`);
+};
+
+/**
+ * 按需获取单个章节的完整内容
+ */
+export const fetchChapterContent = async (
+  projectId: string,
+  chapterId: string
+): Promise<NovelChapter> => {
+  return apiGet<NovelChapter>(`/api/projects/${projectId}/chapters/${chapterId}/content`);
+};
+
+/**
+ * 分页获取剧集列表（不含 script 内容）
+ */
+export const fetchEpisodesPaginated = async (
+  projectId: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<PaginatedEpisodes> => {
+  return apiGet<PaginatedEpisodes>(`/api/projects/${projectId}/episodes?page=${page}&pageSize=${pageSize}`);
+};
+
+/**
+ * 按需获取单个剧集的完整剧本
+ */
+export const fetchEpisodeContent = async (
+  projectId: string,
+  episodeId: string
+): Promise<NovelEpisode> => {
+  return apiGet<NovelEpisode>(`/api/projects/${projectId}/episodes/${episodeId}/content`);
 };
 
 // Initial template for new projects

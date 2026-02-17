@@ -463,8 +463,10 @@ interface ProjectMetaRow extends RowDataPacket {
 export async function loadProjectNormalized(
   pool: Pool,
   userId: number,
-  projectId: string
+  projectId: string,
+  options?: { includeFullContent?: boolean }
 ): Promise<ProjectState | null> {
+  const includeFullContent = options?.includeFullContent ?? false;
   // 加载项目元数据
   const [metaRows] = await pool.execute<ProjectMetaRow[]>(
     `SELECT * FROM projects WHERE id = ? AND user_id = ?`,
@@ -484,6 +486,16 @@ export async function loadProjectNormalized(
   }
 
   // 从规范化表并行加载所有子数据
+  // 优化：默认 novel_chapters 只加载元数据（不含 content），novel_episodes 只加载元数据（不含 script）
+  // 章节内容和剧集剧本在用户打开对应页面时按需加载
+  // 导出时 includeFullContent=true 以获取完整数据
+  const chapterQuery = includeFullContent
+    ? 'SELECT * FROM novel_chapters WHERE project_id = ? AND user_id = ? ORDER BY chapter_index'
+    : 'SELECT id, chapter_index, reel, title, CHAR_LENGTH(content) AS word_count FROM novel_chapters WHERE project_id = ? AND user_id = ? ORDER BY chapter_index';
+  const episodeQuery = includeFullContent
+    ? 'SELECT * FROM novel_episodes WHERE project_id = ? AND user_id = ?'
+    : 'SELECT id, name, chapter_ids, chapter_range, status, episode_created_at, episode_updated_at, CHAR_LENGTH(script) AS script_length FROM novel_episodes WHERE project_id = ? AND user_id = ?';
+
   const [
     [chapterRows],
     [episodeRows],
@@ -497,8 +509,8 @@ export async function loadProjectNormalized(
     [intervalRows],
     [logRows],
   ] = await Promise.all([
-    pool.execute<RowDataPacket[]>('SELECT * FROM novel_chapters WHERE project_id = ? AND user_id = ? ORDER BY chapter_index', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM novel_episodes WHERE project_id = ? AND user_id = ?', [projectId, userId]),
+    pool.execute<RowDataPacket[]>(chapterQuery, [projectId, userId]),
+    pool.execute<RowDataPacket[]>(episodeQuery, [projectId, userId]),
     pool.execute<RowDataPacket[]>('SELECT * FROM script_characters WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
     pool.execute<RowDataPacket[]>('SELECT * FROM character_variations WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
     pool.execute<RowDataPacket[]>('SELECT * FROM script_scenes WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
@@ -511,25 +523,47 @@ export async function loadProjectNormalized(
   ]);
 
   // ── 组装小说章节 ──
-  const novelChapters = chapterRows.map(r => ({
-    id: r.id,
-    index: r.chapter_index,
-    reel: r.reel || '',
-    title: r.title || '',
-    content: r.content || '',
-  }));
+  const novelChapters = chapterRows.map(r => includeFullContent
+    ? {
+        id: r.id,
+        index: r.chapter_index,
+        reel: r.reel || '',
+        title: r.title || '',
+        content: r.content || '',
+      }
+    : {
+        id: r.id,
+        index: r.chapter_index,
+        reel: r.reel || '',
+        title: r.title || '',
+        content: '',
+        wordCount: r.word_count || 0,
+      }
+  );
 
   // ── 组装小说剧集 ──
-  const novelEpisodes = episodeRows.map(r => ({
-    id: r.id,
-    name: r.name || '',
-    chapterIds: safeJsonParse(r.chapter_ids, []),
-    chapterRange: r.chapter_range || '',
-    script: r.script || '',
-    status: r.status || 'pending',
-    createdAt: r.episode_created_at || 0,
-    updatedAt: r.episode_updated_at || 0,
-  }));
+  const novelEpisodes = episodeRows.map(r => includeFullContent
+    ? {
+        id: r.id,
+        name: r.name || '',
+        chapterIds: safeJsonParse(r.chapter_ids, []),
+        chapterRange: r.chapter_range || '',
+        script: r.script || '',
+        status: r.status || 'pending',
+        createdAt: r.episode_created_at || 0,
+        updatedAt: r.episode_updated_at || 0,
+      }
+    : {
+        id: r.id,
+        name: r.name || '',
+        chapterIds: safeJsonParse(r.chapter_ids, []),
+        chapterRange: r.chapter_range || '',
+        script: '',
+        status: r.status || 'pending',
+        createdAt: r.episode_created_at || 0,
+        updatedAt: r.episode_updated_at || 0,
+      }
+  );
 
   // ── 组装角色变体（按角色分组）──
   // 优化：有 URL 时只发 URL 给前端（体积小），base64 留在 DB 供服务端 API 使用
@@ -788,7 +822,7 @@ export async function exportProjectFull(
   userId: number,
   projectId: string
 ): Promise<any | null> {
-  return loadProjectNormalized(pool, userId, projectId);
+  return loadProjectNormalized(pool, userId, projectId, { includeFullContent: true });
 }
 
 // ─── 导出当前用户所有项目的完整数据 ──────────────────────────────
@@ -804,7 +838,7 @@ export async function exportAllProjects(
 
   const projects: any[] = [];
   for (const row of rows) {
-    const p = await loadProjectNormalized(pool, userId, row.id);
+    const p = await loadProjectNormalized(pool, userId, row.id, { includeFullContent: true });
     if (p) projects.push(p);
   }
   return projects;

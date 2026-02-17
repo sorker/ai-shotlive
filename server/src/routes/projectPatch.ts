@@ -732,6 +732,162 @@ router.patch('/:id/shots/:shotId/videos/:videoId', async (req: AuthRequest, res:
 });
 
 // ============================================
+// 小说章节 —— 按需加载
+// ============================================
+
+/**
+ * GET /:id/chapters — 分页获取章节列表（仅元数据，不含 content）
+ * Query: page=1, pageSize=20
+ */
+router.get('/:id/chapters', async (req: AuthRequest, res: Response) => {
+  const pool = getPool();
+  const { id: projectId } = req.params;
+  const userId = req.userId!;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 20));
+  const offset = (page - 1) * pageSize;
+
+  try {
+    const [[countRow]] = await pool.execute<any[]>(
+      'SELECT COUNT(*) AS total FROM novel_chapters WHERE project_id = ? AND user_id = ?',
+      [projectId, userId]
+    );
+    const total = countRow.total;
+
+    const [rows] = await pool.execute<any[]>(
+      `SELECT id, chapter_index, reel, title, CHAR_LENGTH(content) AS word_count
+       FROM novel_chapters WHERE project_id = ? AND user_id = ?
+       ORDER BY chapter_index LIMIT ? OFFSET ?`,
+      [projectId, userId, pageSize, offset]
+    );
+
+    const chapters = rows.map((r: any) => ({
+      id: r.id,
+      index: r.chapter_index,
+      reel: r.reel || '',
+      title: r.title || '',
+      content: '',
+      wordCount: r.word_count || 0,
+    }));
+
+    res.json({ chapters, total, page, pageSize });
+  } catch (err: any) {
+    console.error('GET chapters failed:', err.message);
+    res.status(500).json({ error: '获取章节列表失败' });
+  }
+});
+
+/**
+ * GET /:id/chapters/:chapterId/content — 按需获取单个章节的完整内容
+ */
+router.get('/:id/chapters/:chapterId/content', async (req: AuthRequest, res: Response) => {
+  const pool = getPool();
+  const { id: projectId, chapterId } = req.params;
+  const userId = req.userId!;
+
+  try {
+    const [rows] = await pool.execute<any[]>(
+      'SELECT id, chapter_index, reel, title, content FROM novel_chapters WHERE id = ? AND project_id = ? AND user_id = ?',
+      [chapterId, projectId, userId]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: '章节不存在' });
+      return;
+    }
+    const r = rows[0];
+    res.json({
+      id: r.id,
+      index: r.chapter_index,
+      reel: r.reel || '',
+      title: r.title || '',
+      content: r.content || '',
+    });
+  } catch (err: any) {
+    console.error('GET chapter content failed:', err.message);
+    res.status(500).json({ error: '获取章节内容失败' });
+  }
+});
+
+/**
+ * GET /:id/episodes — 分页获取剧集列表（不含 script 内容）
+ * Query: page=1, pageSize=20
+ */
+router.get('/:id/episodes', async (req: AuthRequest, res: Response) => {
+  const pool = getPool();
+  const { id: projectId } = req.params;
+  const userId = req.userId!;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 20));
+  const offset = (page - 1) * pageSize;
+
+  try {
+    const [[countRow]] = await pool.execute<any[]>(
+      'SELECT COUNT(*) AS total FROM novel_episodes WHERE project_id = ? AND user_id = ?',
+      [projectId, userId]
+    );
+    const total = countRow.total;
+
+    const [rows] = await pool.execute<any[]>(
+      `SELECT id, name, chapter_ids, chapter_range, status, episode_created_at, episode_updated_at, CHAR_LENGTH(script) AS script_length
+       FROM novel_episodes WHERE project_id = ? AND user_id = ?
+       ORDER BY episode_created_at LIMIT ? OFFSET ?`,
+      [projectId, userId, pageSize, offset]
+    );
+
+    const episodes = rows.map((r: any) => ({
+      id: r.id,
+      name: r.name || '',
+      chapterIds: (() => { try { return JSON.parse(r.chapter_ids); } catch { return []; } })(),
+      chapterRange: r.chapter_range || '',
+      script: '',
+      status: r.status || 'pending',
+      createdAt: r.episode_created_at || 0,
+      updatedAt: r.episode_updated_at || 0,
+      scriptLength: r.script_length || 0,
+    }));
+
+    res.json({ episodes, total, page, pageSize });
+  } catch (err: any) {
+    console.error('GET episodes failed:', err.message);
+    res.status(500).json({ error: '获取剧集列表失败' });
+  }
+});
+
+/**
+ * GET /:id/episodes/:episodeId/content — 按需获取单个剧集的完整剧本
+ */
+router.get('/:id/episodes/:episodeId/content', async (req: AuthRequest, res: Response) => {
+  const pool = getPool();
+  const { id: projectId, episodeId } = req.params;
+  const userId = req.userId!;
+
+  try {
+    const [rows] = await pool.execute<any[]>(
+      'SELECT id, name, chapter_ids, chapter_range, script, status, episode_created_at, episode_updated_at FROM novel_episodes WHERE id = ? AND project_id = ? AND user_id = ?',
+      [episodeId, projectId, userId]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: '剧集不存在' });
+      return;
+    }
+    const r = rows[0];
+    res.json({
+      id: r.id,
+      name: r.name || '',
+      chapterIds: (() => { try { return JSON.parse(r.chapter_ids); } catch { return []; } })(),
+      chapterRange: r.chapter_range || '',
+      script: r.script || '',
+      status: r.status || 'pending',
+      createdAt: r.episode_created_at || 0,
+      updatedAt: r.episode_updated_at || 0,
+    });
+  } catch (err: any) {
+    console.error('GET episode content failed:', err.message);
+    res.status(500).json({ error: '获取剧集内容失败' });
+  }
+});
+
+// ============================================
 // 小说章节 CRUD
 // ============================================
 
