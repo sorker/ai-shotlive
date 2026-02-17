@@ -14,10 +14,11 @@ interface Props {
   project: ProjectState;
   updateProject: (updates: Partial<ProjectState> | ((prev: ProjectState) => ProjectState)) => void;
   onSelectEpisodeForStoryboard: (episodeId: string) => void;
+  onSwitchEpisode?: (episodeId: string | null) => Promise<void>;
   onGeneratingChange?: (isGenerating: boolean) => void;
 }
 
-const EpisodeManager: React.FC<Props> = ({ project, updateProject, onSelectEpisodeForStoryboard, onGeneratingChange }) => {
+const EpisodeManager: React.FC<Props> = ({ project, updateProject, onSelectEpisodeForStoryboard, onSwitchEpisode, onGeneratingChange }) => {
   const { showAlert } = useAlert();
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [generatingEpisodeId, setGeneratingEpisodeId] = useState<string | null>(null);
@@ -340,11 +341,21 @@ const EpisodeManager: React.FC<Props> = ({ project, updateProject, onSelectEpiso
         return;
       }
     }
+
+    // 先更新 rawScript（本地状态）
     updateProject({
       rawScript: script,
       selectedEpisodeId: episode.id,
     });
-    PS.patchProject(project.id, { rawScript: script, selectedEpisodeId: episode.id });
+
+    // 切换剧本并重新加载该剧本的隔离数据
+    if (onSwitchEpisode) {
+      // 先保存 rawScript
+      await PS.patchProject(project.id, { rawScript: script, selectedEpisodeId: episode.id });
+      await onSwitchEpisode(episode.id);
+    } else {
+      PS.patchProject(project.id, { rawScript: script, selectedEpisodeId: episode.id });
+    }
     onSelectEpisodeForStoryboard(episode.id);
   };
 
@@ -557,7 +568,7 @@ const EpisodeManager: React.FC<Props> = ({ project, updateProject, onSelectEpiso
                 剧集剧本列表
               </h4>
               <p className="text-[10px] text-[var(--text-muted)] mt-1">
-                点击"用于分镜"可将剧本导入故事编辑器，进行分镜生成
+                点击"使用此剧本创作"选定剧本后，后续所有创作数据将绑定到该剧本
               </p>
             </div>
             {totalEpisodes > 0 && (
@@ -638,11 +649,15 @@ const EpisodeManager: React.FC<Props> = ({ project, updateProject, onSelectEpiso
                           <>
                             <button
                               onClick={() => handleUseForStoryboard(episode)}
-                              className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md
-                                bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
-                              title="将此剧本导入故事编辑器用于分镜生成"
+                              disabled={isSelected}
+                              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                                isSelected
+                                  ? 'bg-[var(--success-bg)] text-[var(--success-text)] cursor-default border border-[var(--success-border)]'
+                                  : 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]'
+                              }`}
+                              title={isSelected ? '当前正在使用此剧本创作' : '使用此剧本进行创作（故事编辑、分镜、角色场景等）'}
                             >
-                              <Play className="w-2.5 h-2.5" /> 用于分镜
+                              <Play className="w-2.5 h-2.5" /> {isSelected ? '创作中' : '使用此剧本创作'}
                             </button>
                             <button
                               onClick={() => handleStartEditScript(episode)}

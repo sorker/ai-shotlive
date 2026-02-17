@@ -309,6 +309,9 @@ export async function saveProjectNormalized(
     return null;
   };
 
+  // 剧本级数据隔离：使用当前选中的 episodeId
+  const episodeId = project.selectedEpisodeId || '';
+
   // ⑤ 写入角色 + 角色变体
   const chars = sd?.characters || [];
   for (let i = 0; i < chars.length; i++) {
@@ -319,12 +322,12 @@ export async function saveProjectNormalized(
 
     await conn.execute(
       `INSERT INTO script_characters
-       (id, project_id, user_id, name, gender, age, personality,
+       (id, project_id, user_id, episode_id, name, gender, age, personality,
         visual_prompt, negative_prompt, core_features,
         reference_image, reference_image_url, turnaround_data, turnaround_image, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        ch.id, pid, userId, ch.name || '', ch.gender || '', ch.age || '',
+        ch.id, pid, userId, episodeId, ch.name || '', ch.gender || '', ch.age || '',
         ch.personality || '',
         ch.visualPrompt || null, ch.negativePrompt || null, ch.coreFeatures || null,
         resolveImageValue(ch.referenceImage, prevCharImg.get(ch.id), 'character', ch.id),
@@ -341,9 +344,9 @@ export async function saveProjectNormalized(
       const v = ch.variations[j];
       await conn.execute(
         `INSERT INTO character_variations
-         (id, character_id, project_id, user_id, name, visual_prompt, negative_prompt, reference_image, reference_image_url, status, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [v.id, ch.id, pid, userId, v.name || '', v.visualPrompt || null, v.negativePrompt || null,
+         (id, character_id, project_id, user_id, episode_id, name, visual_prompt, negative_prompt, reference_image, reference_image_url, status, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [v.id, ch.id, pid, userId, episodeId, v.name || '', v.visualPrompt || null, v.negativePrompt || null,
          resolveImageValue(v.referenceImage, prevVarImg.get(`${ch.id}:${v.id}`), 'variation', v.id),
          v.referenceImageUrl || null, v.status || null, j]
       );
@@ -356,10 +359,10 @@ export async function saveProjectNormalized(
     const s = scenes[i];
     await conn.execute(
       `INSERT INTO script_scenes
-       (id, project_id, user_id, location, time_period, atmosphere,
+       (id, project_id, user_id, episode_id, location, time_period, atmosphere,
         visual_prompt, negative_prompt, reference_image, reference_image_url, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [s.id, pid, userId, s.location || '', s.time || '', s.atmosphere || '',
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [s.id, pid, userId, episodeId, s.location || '', s.time || '', s.atmosphere || '',
        s.visualPrompt || null, s.negativePrompt || null,
        resolveImageValue(s.referenceImage, prevSceneImg.get(s.id), 'scene', s.id),
        s.referenceImageUrl || null, s.status || null, i]
@@ -372,10 +375,10 @@ export async function saveProjectNormalized(
     const p = props[i];
     await conn.execute(
       `INSERT INTO script_props
-       (id, project_id, user_id, name, category, description,
+       (id, project_id, user_id, episode_id, name, category, description,
         visual_prompt, negative_prompt, reference_image, reference_image_url, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [p.id, pid, userId, p.name || '', p.category || '', p.description || '', p.visualPrompt || null, p.negativePrompt || null,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, pid, userId, episodeId, p.name || '', p.category || '', p.description || '', p.visualPrompt || null, p.negativePrompt || null,
        resolveImageValue(p.referenceImage, prevPropImg.get(p.id), 'prop', p.id),
        p.referenceImageUrl || null, p.status || null, i]
     );
@@ -386,9 +389,9 @@ export async function saveProjectNormalized(
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i];
     await conn.execute(
-      `INSERT INTO story_paragraphs (paragraph_id, project_id, user_id, text, scene_ref_id, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [p.id, pid, userId, p.text || '', p.sceneRefId || '', i]
+      `INSERT INTO story_paragraphs (paragraph_id, project_id, user_id, episode_id, text, scene_ref_id, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, pid, userId, episodeId, p.text || '', p.sceneRefId || '', i]
     );
   }
 
@@ -400,12 +403,12 @@ export async function saveProjectNormalized(
 
     await conn.execute(
       `INSERT INTO shots
-       (id, project_id, user_id, scene_id, action_summary, dialogue,
+       (id, project_id, user_id, episode_id, scene_id, action_summary, dialogue,
         camera_movement, shot_size, characters_json, character_variations_json, props_json,
         video_model, nine_grid_panels, nine_grid_image, nine_grid_prompt, nine_grid_status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        shot.id, pid, userId,
+        shot.id, pid, userId, episodeId,
         shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
         shot.cameraMovement || '', shot.shotSize || null,
         JSON.stringify(shot.characters || []),
@@ -424,9 +427,9 @@ export async function saveProjectNormalized(
     for (const kf of shot.keyframes || []) {
       const kfImgVal = resolveImageValue(kf.imageUrl, prevKfImg.get(`${shot.id}:${kf.id}`), 'keyframe', kf.id);
       await conn.execute(
-        `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [kf.id, shot.id, pid, userId, kf.type || 'start', kf.visualPrompt || '', kfImgVal, kf.status || 'pending']
+        `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [kf.id, shot.id, pid, userId, episodeId, kf.type || 'start', kf.visualPrompt || '', kfImgVal, kf.status || 'pending']
       );
     }
 
@@ -436,11 +439,11 @@ export async function saveProjectNormalized(
       const videoVal = resolveToFilePath(pid, 'video', iv.id, iv.videoUrl);
       await conn.execute(
         `INSERT INTO shot_video_intervals
-         (id, shot_id, project_id, user_id, start_keyframe_id, end_keyframe_id,
+         (id, shot_id, project_id, user_id, episode_id, start_keyframe_id, end_keyframe_id,
           duration, motion_strength, video_url, video_prompt, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          iv.id, shot.id, pid, userId,
+          iv.id, shot.id, pid, userId, episodeId,
           iv.startKeyframeId || '', iv.endKeyframeId || '',
           iv.duration || 0, iv.motionStrength || 5,
           videoVal, iv.videoPrompt || null, iv.status || 'pending',
@@ -453,11 +456,11 @@ export async function saveProjectNormalized(
   for (const log of project.renderLogs || []) {
     await conn.execute(
       `INSERT INTO render_logs
-       (id, project_id, user_id, timestamp_ms, type, resource_id, resource_name,
+       (id, project_id, user_id, episode_id, timestamp_ms, type, resource_id, resource_name,
         status, model, prompt, error, input_tokens, output_tokens, total_tokens, duration_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        log.id, pid, userId,
+        log.id, pid, userId, episodeId,
         log.timestamp || null,
         log.type || '', log.resourceId || '', log.resourceName || '',
         log.status || '', log.model || '', log.prompt || null, log.error || null,
@@ -534,6 +537,13 @@ export async function loadProjectNormalized(
     ? 'SELECT * FROM novel_episodes WHERE project_id = ? AND user_id = ?'
     : 'SELECT id, name, chapter_ids, chapter_range, status, episode_created_at, episode_updated_at, CHAR_LENGTH(script) AS script_length FROM novel_episodes WHERE project_id = ? AND user_id = ?';
 
+  // 剧本级数据隔离：如果有选中的剧集，下游数据只加载该剧集的数据
+  // 导出时（includeFullContent）加载全部数据
+  const activeEpisodeId = meta.selected_episode_id || '';
+  const hasActiveEpisode = !!meta.selected_episode_id;
+  const episodeFilter = !includeFullContent && hasActiveEpisode ? ' AND episode_id = ?' : '';
+  const episodeParams = !includeFullContent && hasActiveEpisode ? [activeEpisodeId] : [];
+
   const [
     [chapterRows],
     [episodeRows],
@@ -549,15 +559,15 @@ export async function loadProjectNormalized(
   ] = await Promise.all([
     pool.execute<RowDataPacket[]>(chapterQuery, [projectId, userId]),
     pool.execute<RowDataPacket[]>(episodeQuery, [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM script_characters WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM character_variations WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM script_scenes WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM script_props WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM story_paragraphs WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM shots WHERE project_id = ? AND user_id = ? ORDER BY sort_order', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM shot_keyframes WHERE project_id = ? AND user_id = ?', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM shot_video_intervals WHERE project_id = ? AND user_id = ?', [projectId, userId]),
-    pool.execute<RowDataPacket[]>('SELECT * FROM render_logs WHERE project_id = ? AND user_id = ? ORDER BY timestamp_ms', [projectId, userId]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM script_characters WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY sort_order`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM character_variations WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY sort_order`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM script_scenes WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY sort_order`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM script_props WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY sort_order`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM story_paragraphs WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY sort_order`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM shots WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY sort_order`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM shot_keyframes WHERE project_id = ? AND user_id = ?${episodeFilter}`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM shot_video_intervals WHERE project_id = ? AND user_id = ?${episodeFilter}`, [projectId, userId, ...episodeParams]),
+    pool.execute<RowDataPacket[]>(`SELECT * FROM render_logs WHERE project_id = ? AND user_id = ?${episodeFilter} ORDER BY timestamp_ms`, [projectId, userId, ...episodeParams]),
   ]);
 
   // ── 组装小说章节 ──

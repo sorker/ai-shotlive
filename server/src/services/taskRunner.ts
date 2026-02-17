@@ -74,6 +74,7 @@ export interface TaskRecord {
   target_type: string | null;
   target_shot_id: string | null;
   target_entity_id: string | null;
+  target_episode_id: string;
   created_at: Date;
   updated_at: Date;
   completed_at: Date | null;
@@ -114,10 +115,17 @@ export const createTask = async (
 ): Promise<TaskRecord> => {
   const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
 
+  // 获取项目当前激活的 episode_id
+  const [projRows] = await pool.execute<any[]>(
+    'SELECT selected_episode_id FROM projects WHERE id = ? AND user_id = ?',
+    [params.projectId, userId]
+  );
+  const episodeId = projRows[0]?.selected_episode_id || '';
+
   await pool.execute(
     `INSERT INTO generation_tasks
-      (id, user_id, project_id, type, status, params, model_id, target_type, target_shot_id, target_entity_id)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+      (id, user_id, project_id, type, status, params, model_id, target_type, target_shot_id, target_entity_id, target_episode_id)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
     [
       taskId,
       userId,
@@ -128,6 +136,7 @@ export const createTask = async (
       params.target?.type || null,
       params.target?.shotId || null,
       params.target?.entityId || null,
+      episodeId,
     ]
   );
 
@@ -375,7 +384,7 @@ const executeTask = async (
 
     // 自动回写结果到项目
     if (params.target) {
-      await applyResultToProject(pool, userId, task.project_id, params.target, result);
+      await applyResultToProject(pool, userId, task.project_id, params.target, result, task.target_episode_id);
     }
 
     console.log(`✅ [TaskRunner] 任务完成: ${taskId}`);
@@ -558,7 +567,8 @@ const applyResultToProject = async (
   userId: number,
   projectId: string,
   target: NonNullable<TaskCreateParams['target']>,
-  result: string
+  result: string,
+  episodeId?: string
 ): Promise<void> => {
   // 解析结构化结果（OpenAI-image 返回 JSON 含 base64 + url）
   let base64Result = result;
@@ -573,16 +583,20 @@ const applyResultToProject = async (
     } catch { /* 非 JSON，当作普通 base64 */ }
   }
 
+  // episode_id 用于精准定位数据（剧本级隔离）
+  const epId = episodeId || '';
+  const epFilter = epId ? ' AND episode_id = ?' : '';
+  const epParam = epId ? [epId] : [];
+
   try {
     switch (target.type) {
       case 'keyframe':
         if (target.entityId && target.shotId) {
-          // base64 → 保存为文件，DB 存文件路径
           const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result);
           await pool.execute(
             `UPDATE shot_keyframes SET image_url = ?, status = 'completed'
-             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
-            [filePath, target.entityId, target.shotId, projectId, userId]
+             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?${epFilter}`,
+            [filePath, target.entityId, target.shotId, projectId, userId, ...epParam]
           );
           console.log(`  📝 [TaskRunner] 关键帧已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
@@ -593,8 +607,8 @@ const applyResultToProject = async (
           const filePath = resolveToFilePath(projectId, 'video', target.entityId, base64Result);
           await pool.execute(
             `UPDATE shot_video_intervals SET video_url = ?, status = 'completed'
-             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
-            [filePath, target.entityId, target.shotId, projectId, userId]
+             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?${epFilter}`,
+            [filePath, target.entityId, target.shotId, projectId, userId, ...epParam]
           );
           console.log(`  📝 [TaskRunner] 视频片段已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
@@ -605,8 +619,8 @@ const applyResultToProject = async (
           const filePath = resolveToFilePath(projectId, 'character', target.entityId, base64Result);
           await pool.execute(
             `UPDATE script_characters SET reference_image = ?, reference_image_url = ?, status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?`,
-            [filePath, urlResult, target.entityId, projectId, userId]
+             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
+            [filePath, urlResult, target.entityId, projectId, userId, ...epParam]
           );
           console.log(`  📝 [TaskRunner] 角色图片已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
@@ -617,8 +631,8 @@ const applyResultToProject = async (
           const filePath = resolveToFilePath(projectId, 'scene', target.entityId, base64Result);
           await pool.execute(
             `UPDATE script_scenes SET reference_image = ?, reference_image_url = ?, status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?`,
-            [filePath, urlResult, target.entityId, projectId, userId]
+             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
+            [filePath, urlResult, target.entityId, projectId, userId, ...epParam]
           );
           console.log(`  📝 [TaskRunner] 场景图片已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
@@ -629,8 +643,8 @@ const applyResultToProject = async (
           const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result);
           await pool.execute(
             `UPDATE shots SET nine_grid_image = ?, nine_grid_status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?`,
-            [filePath, target.entityId, projectId, userId]
+             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
+            [filePath, target.entityId, projectId, userId, ...epParam]
           );
           console.log(`  📝 [TaskRunner] 九宫格已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
@@ -728,7 +742,7 @@ const recoverPollingTask = async (
     await completeTask(pool, task.id, result);
 
     if (params.target) {
-      await applyResultToProject(pool, task.user_id, task.project_id, params.target, result);
+      await applyResultToProject(pool, task.user_id, task.project_id, params.target, result, task.target_episode_id);
     }
 
     console.log(`  ✅ 恢复任务完成: ${task.id}`);

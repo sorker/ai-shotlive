@@ -16,6 +16,17 @@ const router = Router();
 router.use(authMiddleware);
 
 /**
+ * 获取项目当前激活的 episode_id（剧本级数据隔离）
+ */
+async function getActiveEpisodeId(pool: ReturnType<typeof getPool>, projectId: string, userId: number): Promise<string> {
+  const [rows] = await pool.execute<any[]>(
+    'SELECT selected_episode_id FROM projects WHERE id = ? AND user_id = ?',
+    [projectId, userId]
+  );
+  return rows[0]?.selected_episode_id || '';
+}
+
+/**
  * 预处理请求体中的图片字段：base64 → 保存为文件，返回文件路径
  */
 function resolveBodyImages(
@@ -143,10 +154,12 @@ router.post('/:id/characters', async (req: AuthRequest, res: Response) => {
   const ch = req.body;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+
     // 获取当前最大 sort_order
     const [maxRows] = await pool.execute<any[]>(
-      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM script_characters WHERE project_id = ? AND user_id = ?',
-      [projectId, userId]
+      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM script_characters WHERE project_id = ? AND user_id = ? AND episode_id = ?',
+      [projectId, userId, episodeId]
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
@@ -160,11 +173,11 @@ router.post('/:id/characters', async (req: AuthRequest, res: Response) => {
 
     await pool.execute(
       `INSERT INTO script_characters
-       (id, project_id, user_id, name, gender, age, personality, visual_prompt, negative_prompt, core_features,
+       (id, project_id, user_id, episode_id, name, gender, age, personality, visual_prompt, negative_prompt, core_features,
         reference_image, reference_image_url, turnaround_data, turnaround_image, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        ch.id, projectId, userId,
+        ch.id, projectId, userId, episodeId,
         ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
         ch.visualPrompt || '', ch.negativePrompt || null, ch.coreFeatures || null,
         refImage, ch.referenceImageUrl || null,
@@ -279,20 +292,22 @@ router.post('/:id/characters/:charId/variations', async (req: AuthRequest, res: 
   const v = req.body;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+
     const [maxRows] = await pool.execute<any[]>(
-      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM character_variations WHERE character_id = ? AND project_id = ? AND user_id = ?',
-      [charId, projectId, userId]
+      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM character_variations WHERE character_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+      [charId, projectId, userId, episodeId]
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
     const refImage = resolveToFilePath(projectId, 'variation', v.id, v.referenceImage);
     await pool.execute(
       `INSERT INTO character_variations
-       (id, character_id, project_id, user_id, name, visual_prompt, negative_prompt,
+       (id, character_id, project_id, user_id, episode_id, name, visual_prompt, negative_prompt,
         reference_image, reference_image_url, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        v.id, charId, projectId, userId,
+        v.id, charId, projectId, userId, episodeId,
         v.name || '', v.visualPrompt || '', v.negativePrompt || null,
         refImage, v.referenceImageUrl || null,
         v.status || 'pending', sortOrder,
@@ -369,20 +384,22 @@ router.post('/:id/scenes', async (req: AuthRequest, res: Response) => {
   const s = req.body;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+
     const [maxRows] = await pool.execute<any[]>(
-      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM script_scenes WHERE project_id = ? AND user_id = ?',
-      [projectId, userId]
+      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM script_scenes WHERE project_id = ? AND user_id = ? AND episode_id = ?',
+      [projectId, userId, episodeId]
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
     const refImage = resolveToFilePath(projectId, 'scene', s.id, s.referenceImage);
     await pool.execute(
       `INSERT INTO script_scenes
-       (id, project_id, user_id, location, time_period, atmosphere, visual_prompt, negative_prompt,
+       (id, project_id, user_id, episode_id, location, time_period, atmosphere, visual_prompt, negative_prompt,
         reference_image, reference_image_url, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        s.id, projectId, userId,
+        s.id, projectId, userId, episodeId,
         s.location || '', s.time || s.timePeriod || '', s.atmosphere || '',
         s.visualPrompt || '', s.negativePrompt || null,
         refImage, s.referenceImageUrl || null,
@@ -459,20 +476,22 @@ router.post('/:id/props', async (req: AuthRequest, res: Response) => {
   const p = req.body;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+
     const [maxRows] = await pool.execute<any[]>(
-      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM script_props WHERE project_id = ? AND user_id = ?',
-      [projectId, userId]
+      'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM script_props WHERE project_id = ? AND user_id = ? AND episode_id = ?',
+      [projectId, userId, episodeId]
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
     const refImage = resolveToFilePath(projectId, 'prop', p.id, p.referenceImage);
     await pool.execute(
       `INSERT INTO script_props
-       (id, project_id, user_id, name, category, description, visual_prompt, negative_prompt,
+       (id, project_id, user_id, episode_id, name, category, description, visual_prompt, negative_prompt,
         reference_image, reference_image_url, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        p.id, projectId, userId,
+        p.id, projectId, userId, episodeId,
         p.name || '', p.category || '', p.description || '',
         p.visualPrompt || '', p.negativePrompt || null,
         refImage, p.referenceImageUrl || null,
@@ -548,25 +567,25 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
   const { id: projectId } = req.params;
   const userId = req.userId!;
   const shot = req.body;
-  const insertAfterSortOrder = req.body._insertAfterSortOrder; // 可选: 插入位置
+  const insertAfterSortOrder = req.body._insertAfterSortOrder;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
       let sortOrder: number;
       if (insertAfterSortOrder !== undefined && insertAfterSortOrder !== null) {
-        // 把后续的 sort_order 都 +1
         await conn.execute(
-          'UPDATE shots SET sort_order = sort_order + 1 WHERE project_id = ? AND user_id = ? AND sort_order > ?',
-          [projectId, userId, insertAfterSortOrder]
+          'UPDATE shots SET sort_order = sort_order + 1 WHERE project_id = ? AND user_id = ? AND episode_id = ? AND sort_order > ?',
+          [projectId, userId, episodeId, insertAfterSortOrder]
         );
         sortOrder = insertAfterSortOrder + 1;
       } else {
         const [maxRows] = await conn.execute<any[]>(
-          'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM shots WHERE project_id = ? AND user_id = ?',
-          [projectId, userId]
+          'SELECT COALESCE(MAX(sort_order), -1) AS mx FROM shots WHERE project_id = ? AND user_id = ? AND episode_id = ?',
+          [projectId, userId, episodeId]
         );
         sortOrder = (maxRows[0]?.mx ?? -1) + 1;
       }
@@ -574,12 +593,12 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
       const ng = shot.nineGrid;
       await conn.execute(
         `INSERT INTO shots
-         (id, project_id, user_id, scene_id, action_summary, dialogue,
+         (id, project_id, user_id, episode_id, scene_id, action_summary, dialogue,
           camera_movement, shot_size, characters_json, character_variations_json, props_json,
           video_model, nine_grid_panels, nine_grid_image, nine_grid_prompt, nine_grid_status, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          shot.id, projectId, userId,
+          shot.id, projectId, userId, episodeId,
           shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
           shot.cameraMovement || '', shot.shotSize || null,
           JSON.stringify(shot.characters || []),
@@ -593,26 +612,24 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
         ]
       );
 
-      // 插入关键帧
       for (const kf of shot.keyframes || []) {
         await conn.execute(
-          `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '',
+          `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '',
            resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
         );
       }
 
-      // 插入视频片段
       if (shot.interval) {
         const iv = shot.interval;
         await conn.execute(
           `INSERT INTO shot_video_intervals
-           (id, shot_id, project_id, user_id, start_keyframe_id, end_keyframe_id,
+           (id, shot_id, project_id, user_id, episode_id, start_keyframe_id, end_keyframe_id,
             duration, motion_strength, video_url, video_prompt, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            iv.id, shot.id, projectId, userId,
+            iv.id, shot.id, projectId, userId, episodeId,
             iv.startKeyframeId || '', iv.endKeyframeId || '',
             iv.duration || 0, iv.motionStrength || 5,
             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
@@ -1104,6 +1121,7 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
   const { scriptData, shots, projectUpdates } = req.body;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -1124,16 +1142,16 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
         }
       }
 
-      // 清空旧的脚本相关数据
+      // 清空当前剧本的脚本相关数据（剧本级隔离：只删除当前 episodeId 的数据）
       const scriptTables = ['script_characters', 'character_variations', 'script_scenes', 'script_props', 'story_paragraphs'];
       for (const table of scriptTables) {
-        await conn.execute(`DELETE FROM \`${table}\` WHERE project_id = ? AND user_id = ?`, [projectId, userId]);
+        await conn.execute(`DELETE FROM \`${table}\` WHERE project_id = ? AND user_id = ? AND episode_id = ?`, [projectId, userId, episodeId]);
       }
 
-      // 清空旧的镜头数据
-      await conn.execute('DELETE FROM shot_keyframes WHERE project_id = ? AND user_id = ?', [projectId, userId]);
-      await conn.execute('DELETE FROM shot_video_intervals WHERE project_id = ? AND user_id = ?', [projectId, userId]);
-      await conn.execute('DELETE FROM shots WHERE project_id = ? AND user_id = ?', [projectId, userId]);
+      // 清空当前剧本的镜头数据
+      await conn.execute('DELETE FROM shot_keyframes WHERE project_id = ? AND user_id = ? AND episode_id = ?', [projectId, userId, episodeId]);
+      await conn.execute('DELETE FROM shot_video_intervals WHERE project_id = ? AND user_id = ? AND episode_id = ?', [projectId, userId, episodeId]);
+      await conn.execute('DELETE FROM shots WHERE project_id = ? AND user_id = ? AND episode_id = ?', [projectId, userId, episodeId]);
 
       // 写入角色
       const characters = scriptData?.characters || [];
@@ -1145,11 +1163,11 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
 
         await conn.execute(
           `INSERT INTO script_characters
-           (id, project_id, user_id, name, gender, age, personality, visual_prompt, negative_prompt, core_features,
+           (id, project_id, user_id, episode_id, name, gender, age, personality, visual_prompt, negative_prompt, core_features,
             reference_image, reference_image_url, turnaround_data, turnaround_image, status, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            ch.id, projectId, userId, ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
+            ch.id, projectId, userId, episodeId, ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
             ch.visualPrompt || '', ch.negativePrompt || null, ch.coreFeatures || null,
             resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage),
             ch.referenceImageUrl || null,
@@ -1159,15 +1177,14 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
           ]
         );
 
-        // 变体
         for (let j = 0; j < (ch.variations || []).length; j++) {
           const v = ch.variations[j];
           await conn.execute(
             `INSERT INTO character_variations
-             (id, character_id, project_id, user_id, name, visual_prompt, negative_prompt,
+             (id, character_id, project_id, user_id, episode_id, name, visual_prompt, negative_prompt,
               reference_image, reference_image_url, status, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [v.id, ch.id, projectId, userId, v.name || '', v.visualPrompt || '', v.negativePrompt || null,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [v.id, ch.id, projectId, userId, episodeId, v.name || '', v.visualPrompt || '', v.negativePrompt || null,
              resolveToFilePath(projectId, 'variation', v.id, v.referenceImage),
              v.referenceImageUrl || null, v.status || 'pending', j]
           );
@@ -1180,10 +1197,10 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
         const s = scenes[i];
         await conn.execute(
           `INSERT INTO script_scenes
-           (id, project_id, user_id, location, time_period, atmosphere, visual_prompt, negative_prompt,
+           (id, project_id, user_id, episode_id, location, time_period, atmosphere, visual_prompt, negative_prompt,
             reference_image, reference_image_url, status, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [s.id, projectId, userId, s.location || '', s.time || '', s.atmosphere || '',
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [s.id, projectId, userId, episodeId, s.location || '', s.time || '', s.atmosphere || '',
            s.visualPrompt || '', s.negativePrompt || null,
            resolveToFilePath(projectId, 'scene', s.id, s.referenceImage),
            s.referenceImageUrl || null,
@@ -1197,10 +1214,10 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
         const p = props[i];
         await conn.execute(
           `INSERT INTO script_props
-           (id, project_id, user_id, name, category, description, visual_prompt, negative_prompt,
+           (id, project_id, user_id, episode_id, name, category, description, visual_prompt, negative_prompt,
             reference_image, reference_image_url, status, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [p.id, projectId, userId, p.name || '', p.category || '', p.description || '',
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [p.id, projectId, userId, episodeId, p.name || '', p.category || '', p.description || '',
            p.visualPrompt || '', p.negativePrompt || null,
            resolveToFilePath(projectId, 'prop', p.id, p.referenceImage),
            p.referenceImageUrl || null,
@@ -1213,9 +1230,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
       for (let i = 0; i < paragraphs.length; i++) {
         const p = paragraphs[i];
         await conn.execute(
-          `INSERT INTO story_paragraphs (paragraph_id, project_id, user_id, text, scene_ref_id, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [p.id, projectId, userId, p.text || '', p.sceneRefId || '', i]
+          `INSERT INTO story_paragraphs (paragraph_id, project_id, user_id, episode_id, text, scene_ref_id, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [p.id, projectId, userId, episodeId, p.text || '', p.sceneRefId || '', i]
         );
       }
 
@@ -1225,12 +1242,12 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
         const ng = shot.nineGrid;
         await conn.execute(
           `INSERT INTO shots
-           (id, project_id, user_id, scene_id, action_summary, dialogue,
+           (id, project_id, user_id, episode_id, scene_id, action_summary, dialogue,
             camera_movement, shot_size, characters_json, character_variations_json, props_json,
             video_model, nine_grid_panels, nine_grid_image, nine_grid_prompt, nine_grid_status, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            shot.id, projectId, userId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
+            shot.id, projectId, userId, episodeId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
             shot.cameraMovement || '', shot.shotSize || null,
             JSON.stringify(shot.characters || []), JSON.stringify(shot.characterVariations || {}),
             JSON.stringify(shot.props || []), shot.videoModel || null,
@@ -1243,9 +1260,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
 
         for (const kf of shot.keyframes || []) {
           await conn.execute(
-            `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '',
+            `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '',
              resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
           );
         }
@@ -1254,10 +1271,10 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
           const iv = shot.interval;
           await conn.execute(
             `INSERT INTO shot_video_intervals
-             (id, shot_id, project_id, user_id, start_keyframe_id, end_keyframe_id,
+             (id, shot_id, project_id, user_id, episode_id, start_keyframe_id, end_keyframe_id,
               duration, motion_strength, video_url, video_prompt, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [iv.id, shot.id, projectId, userId, iv.startKeyframeId || '', iv.endKeyframeId || '',
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [iv.id, shot.id, projectId, userId, episodeId, iv.startKeyframeId || '', iv.endKeyframeId || '',
              iv.duration || 0, iv.motionStrength || 5,
              resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
              iv.videoPrompt || null, iv.status || 'pending']
@@ -1296,11 +1313,11 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
   const { newShots } = req.body;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      // 获取原镜头的 sort_order
       const [origRows] = await conn.execute<any[]>(
         'SELECT sort_order FROM shots WHERE id = ? AND project_id = ? AND user_id = ?',
         [shotId, projectId, userId]
@@ -1312,32 +1329,29 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
       }
       const origSortOrder = origRows[0].sort_order;
 
-      // 删除原镜头及其子数据
       await conn.execute('DELETE FROM shot_keyframes WHERE shot_id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
       await conn.execute('DELETE FROM shot_video_intervals WHERE shot_id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
       await conn.execute('DELETE FROM shots WHERE id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
 
-      // 为新镜头腾出空间: 将后续 sort_order 增加 (newShots.length - 1)
       const shift = newShots.length - 1;
       if (shift > 0) {
         await conn.execute(
-          'UPDATE shots SET sort_order = sort_order + ? WHERE project_id = ? AND user_id = ? AND sort_order > ?',
-          [shift, projectId, userId, origSortOrder]
+          'UPDATE shots SET sort_order = sort_order + ? WHERE project_id = ? AND user_id = ? AND episode_id = ? AND sort_order > ?',
+          [shift, projectId, userId, episodeId, origSortOrder]
         );
       }
 
-      // 插入新镜头
       for (let i = 0; i < newShots.length; i++) {
         const shot = newShots[i];
         const ng = shot.nineGrid;
         await conn.execute(
           `INSERT INTO shots
-           (id, project_id, user_id, scene_id, action_summary, dialogue,
+           (id, project_id, user_id, episode_id, scene_id, action_summary, dialogue,
             camera_movement, shot_size, characters_json, character_variations_json, props_json,
             video_model, nine_grid_panels, nine_grid_image, nine_grid_prompt, nine_grid_status, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            shot.id, projectId, userId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
+            shot.id, projectId, userId, episodeId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
             shot.cameraMovement || '', shot.shotSize || null,
             JSON.stringify(shot.characters || []), JSON.stringify(shot.characterVariations || {}),
             JSON.stringify(shot.props || []), shot.videoModel || null,
@@ -1350,9 +1364,9 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
 
         for (const kf of shot.keyframes || []) {
           await conn.execute(
-            `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '',
+            `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '',
              resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
           );
         }
@@ -1361,10 +1375,10 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
           const iv = shot.interval;
           await conn.execute(
             `INSERT INTO shot_video_intervals
-             (id, shot_id, project_id, user_id, start_keyframe_id, end_keyframe_id,
+             (id, shot_id, project_id, user_id, episode_id, start_keyframe_id, end_keyframe_id,
               duration, motion_strength, video_url, video_prompt, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [iv.id, shot.id, projectId, userId, iv.startKeyframeId || '', iv.endKeyframeId || '',
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [iv.id, shot.id, projectId, userId, episodeId, iv.startKeyframeId || '', iv.endKeyframeId || '',
              iv.duration || 0, iv.motionStrength || 5,
              resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
              iv.videoPrompt || null, iv.status || 'pending']

@@ -10,7 +10,7 @@ import Onboarding, { shouldShowOnboarding, resetOnboarding } from './components/
 import ModelConfigModal from './components/ModelConfig';
 import Login from './components/Login';
 import { ProjectState } from './types';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Clapperboard } from 'lucide-react';
 import { loadProjectFromDB } from './services/storageService';
 import { patchProject } from './services/projectPatchService';
 import { setLogCallback, clearLogCallback } from './services/renderLogService';
@@ -174,6 +174,23 @@ function App() {
     }
   };
 
+  // 切换剧本后重新加载项目数据（获取该剧本的隔离数据）
+  const handleSwitchEpisode = async (episodeId: string | null) => {
+    if (!project) return;
+    setIsProjectLoading(true);
+    try {
+      // 先更新 selectedEpisodeId
+      await patchProject(project.id, { selectedEpisodeId: episodeId });
+      // 重新加载项目（后端会按新的 episodeId 过滤数据）
+      const fullProject = await loadProjectFromDB(project.id);
+      setProject(fullProject);
+    } catch (e) {
+      console.error('切换剧本失败:', e);
+    } finally {
+      setIsProjectLoading(false);
+    }
+  };
+
   const handleExitProject = async () => {
     if (isGenerating) {
       showAlert('当前正在执行生成任务（剧本分镜 / 首帧 / 视频等），退出项目会导致生成数据丢失，且已扣除的费用无法恢复。\n\n确定要退出吗？', {
@@ -192,6 +209,28 @@ function App() {
     setProject(null);
   };
 
+  // 判断是否需要先选择剧本（有剧集但未选择时）
+  const needsEpisodeSelection = project
+    && (project.novelEpisodes?.length > 0)
+    && !project.selectedEpisodeId;
+
+  const renderEpisodeGate = () => (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+      <Clapperboard className="w-16 h-16 text-[var(--text-muted)] mb-4 opacity-30" />
+      <p className="text-lg text-[var(--text-tertiary)] mb-2">请先选择一个剧本</p>
+      <p className="text-xs text-[var(--text-muted)] mb-6 max-w-md leading-relaxed">
+        本项目包含多个剧本，请先在「小说与剧本」页面中选择一个剧本进行创作。<br />
+        不同剧本的故事、角色、场景、分镜等数据相互隔离，资产库数据可共享。
+      </p>
+      <button
+        onClick={() => setStage('script')}
+        className="px-5 py-2.5 text-xs font-medium rounded-lg bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] transition-colors"
+      >
+        前往选择剧本
+      </button>
+    </div>
+  );
+
   const renderStage = () => {
     if (!project) return null;
     switch (project.stage) {
@@ -202,13 +241,17 @@ function App() {
             updateProject={updateProject}
             onShowModelConfig={handleShowModelConfig}
             onGeneratingChange={setIsGenerating}
+            onSwitchEpisode={handleSwitchEpisode}
           />
         );
       case 'assets':
+        if (needsEpisodeSelection) return renderEpisodeGate();
         return <StageAssets project={project} updateProject={updateProject} onGeneratingChange={setIsGenerating} />;
       case 'director':
+        if (needsEpisodeSelection) return renderEpisodeGate();
         return <StageDirector project={project} updateProject={updateProject} onGeneratingChange={setIsGenerating} />;
       case 'export':
+        if (needsEpisodeSelection) return renderEpisodeGate();
         return <StageExport project={project} />;
       case 'prompts':
         return <StagePrompts project={project} updateProject={updateProject} />;
@@ -302,6 +345,11 @@ function App() {
         setStage={setStage} 
         onExit={handleExitProject} 
         projectName={project.title}
+        activeEpisodeName={
+          project.selectedEpisodeId
+            ? (project.novelEpisodes || []).find(ep => ep.id === project.selectedEpisodeId)?.name || '当前剧本'
+            : undefined
+        }
         onShowOnboarding={handleShowOnboarding}
         onShowModelConfig={() => setShowModelConfig(true)}
         isNavigationLocked={isGenerating}

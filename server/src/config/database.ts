@@ -105,6 +105,93 @@ const modifyColumn = async (
 };
 
 /**
+ * 安全地给表添加索引（如果不存在）
+ */
+const addIndexIfNotExists = async (
+  conn: mysql.PoolConnection,
+  table: string,
+  indexName: string,
+  columns: string
+): Promise<void> => {
+  const [rows] = await conn.execute<RowDataPacket[]>(
+    `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  if (rows.length === 0) {
+    try {
+      await conn.execute(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` ${columns}`);
+      console.log(`  ➕ 已添加索引 ${table}.${indexName}`);
+    } catch {
+      // 忽略：索引可能因其他原因已存在
+    }
+  }
+};
+
+/**
+ * 迁移现有数据：将 episode_id = '' 的记录关联到项目当前选中的 selected_episode_id
+ */
+const migrateExistingEpisodeIds = async (conn: mysql.PoolConnection): Promise<void> => {
+  const tables = [
+    'script_characters', 'character_variations', 'script_scenes', 'script_props',
+    'story_paragraphs', 'shots', 'shot_keyframes', 'shot_video_intervals', 'render_logs',
+  ];
+
+  for (const table of tables) {
+    try {
+      const [needMigration] = await conn.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) AS cnt FROM \`${table}\` WHERE episode_id = ''`,
+      );
+      if (needMigration[0]?.cnt > 0) {
+        await conn.execute(
+          `UPDATE \`${table}\` t
+           INNER JOIN projects p ON t.project_id = p.id AND t.user_id = p.user_id
+           SET t.episode_id = COALESCE(p.selected_episode_id, '')
+           WHERE t.episode_id = ''`
+        );
+        console.log(`  🔄 已迁移 ${table} 中 ${needMigration[0].cnt} 条记录的 episode_id`);
+      }
+    } catch {
+      // 表可能不存在或列不存在，忽略
+    }
+  }
+};
+
+/**
+ * 修改主键：将 episode_id 纳入主键，支持不同剧本中存在相同实体 ID
+ */
+const migrateEpisodeIdIntoPrimaryKeys = async (conn: mysql.PoolConnection): Promise<void> => {
+  const pkMigrations: { table: string; newPk: string }[] = [
+    { table: 'script_characters', newPk: '(id, project_id, user_id, episode_id)' },
+    { table: 'character_variations', newPk: '(id, character_id, project_id, user_id, episode_id)' },
+    { table: 'script_scenes', newPk: '(id, project_id, user_id, episode_id)' },
+    { table: 'script_props', newPk: '(id, project_id, user_id, episode_id)' },
+    { table: 'story_paragraphs', newPk: '(paragraph_id, project_id, user_id, episode_id)' },
+    { table: 'shots', newPk: '(id, project_id, user_id, episode_id)' },
+    { table: 'shot_keyframes', newPk: '(id, shot_id, project_id, user_id, episode_id)' },
+    { table: 'shot_video_intervals', newPk: '(id, shot_id, project_id, user_id, episode_id)' },
+    { table: 'render_logs', newPk: '(id, project_id, user_id, episode_id)' },
+  ];
+
+  for (const { table, newPk } of pkMigrations) {
+    try {
+      // 检查 episode_id 是否已在主键中
+      const [pkCols] = await conn.execute<RowDataPacket[]>(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'episode_id'`,
+        [table]
+      );
+      if (pkCols.length === 0) {
+        await conn.execute(`ALTER TABLE \`${table}\` DROP PRIMARY KEY, ADD PRIMARY KEY ${newPk}`);
+        console.log(`  🔑 已更新 ${table} 主键，纳入 episode_id`);
+      }
+    } catch (err: any) {
+      console.warn(`  ⚠️ 更新 ${table} 主键失败: ${err.message}`);
+    }
+  }
+};
+
+/**
  * 初始化数据库 - 创建规范化表结构
  */
 export const initDatabase = async (): Promise<void> => {
@@ -455,6 +542,29 @@ export const initDatabase = async (): Promise<void> => {
     await addColumnIfNotExists(conn, 'character_variations', 'reference_image_url', 'TEXT COMMENT "角色变体参考图原始URL"');
     await addColumnIfNotExists(conn, 'script_scenes', 'reference_image_url', 'TEXT COMMENT "场景参考图原始URL"');
     await addColumnIfNotExists(conn, 'script_props', 'reference_image_url', 'TEXT COMMENT "道具参考图原始URL"');
+
+    // ========== 迁移：为任务表添加 episode_id ==========
+    await addColumnIfNotExists(conn, 'generation_tasks', 'target_episode_id', "VARCHAR(255) NOT NULL DEFAULT '' COMMENT '任务关联的剧本ID'");
+
+    // ========== 迁移：为下游数据表添加 episode_id 列，实现剧本级数据隔离 ==========
+    const episodeScopedTables = [
+      'script_characters', 'character_variations', 'script_scenes', 'script_props',
+      'story_paragraphs', 'shots', 'shot_keyframes', 'shot_video_intervals', 'render_logs',
+    ];
+    for (const table of episodeScopedTables) {
+      await addColumnIfNotExists(conn, table, 'episode_id', "VARCHAR(255) NOT NULL DEFAULT '' COMMENT '关联的剧本/剧集ID，用于数据隔离'");
+    }
+
+    // 为 episode_id 添加索引（加速按剧本查询）
+    for (const table of episodeScopedTables) {
+      await addIndexIfNotExists(conn, table, `idx_episode`, '(episode_id)');
+    }
+
+    // 迁移现有数据：将没有 episode_id 的记录关联到项目当前选中的剧集
+    await migrateExistingEpisodeIds(conn);
+
+    // 修改主键：在主键中加入 episode_id 以支持不同剧本中相同 ID 的实体
+    await migrateEpisodeIdIntoPrimaryKeys(conn);
 
     // ========== 数据修复：清理 JSON 脏数据 ==========
     // 历史 bug：executeImageTask 曾将 {"base64":"...","url":"..."} 存入 image_url/reference_image

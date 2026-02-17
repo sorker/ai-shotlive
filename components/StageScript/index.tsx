@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ProjectState, Shot } from '../../types';
 import { useAlert } from '../GlobalAlert';
 import { parseScriptToData, generateShotList, continueScript, continueScriptStream, rewriteScript, rewriteScriptStream, setScriptLogCallback, clearScriptLogCallback, logScriptProgress } from '../../services/aiService';
+import { Clapperboard } from 'lucide-react';
 import { getFinalValue, validateConfig } from './utils';
 import { DEFAULTS } from './constants';
 import ConfigPanel from './ConfigPanel';
@@ -16,11 +17,12 @@ interface Props {
   updateProject: (updates: Partial<ProjectState> | ((prev: ProjectState) => ProjectState)) => void;
   onShowModelConfig?: () => void;
   onGeneratingChange?: (isGenerating: boolean) => void;
+  onSwitchEpisode?: (episodeId: string | null) => Promise<void>;
 }
 
 type TabMode = 'novel' | 'episodes' | 'story' | 'script';
 
-const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfig, onGeneratingChange }) => {
+const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfig, onGeneratingChange, onSwitchEpisode }) => {
   const { showAlert } = useAlert();
   const [activeTab, setActiveTab] = useState<TabMode>(
     project.scriptData ? 'script' : (project.novelChapters?.length > 0 ? 'episodes' : 'novel')
@@ -669,11 +671,26 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
             project={project}
             updateProject={updateProject}
             onSelectEpisodeForStoryboard={handleSelectEpisodeForStoryboard}
+            onSwitchEpisode={onSwitchEpisode}
             onGeneratingChange={onGeneratingChange}
           />
         )}
 
-        {activeTab === 'story' && (
+        {activeTab === 'story' && !project.selectedEpisodeId && (project.novelEpisodes?.length > 0) && (
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+            <Clapperboard className="w-16 h-16 text-[var(--text-muted)] mb-4 opacity-30" />
+            <p className="text-sm text-[var(--text-tertiary)] mb-2">请先选择一个剧本</p>
+            <p className="text-xs text-[var(--text-muted)] mb-4">在「剧集剧本」标签页中点击"使用此剧本创作"来选定一个剧本，<br />后续的故事编辑、分镜、角色等数据将绑定到该剧本。</p>
+            <button
+              onClick={() => setActiveTab('episodes')}
+              className="px-4 py-2 text-xs font-medium rounded-lg bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] transition-colors"
+            >
+              前往选择剧本
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'story' && (project.selectedEpisodeId || !(project.novelEpisodes?.length > 0)) && (
           <div className="flex h-full bg-[var(--bg-base)] text-[var(--text-secondary)]">
             <ConfigPanel
               title={localTitle}
@@ -709,7 +726,21 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
           </div>
         )}
 
-        {activeTab === 'script' && (
+        {activeTab === 'script' && !project.selectedEpisodeId && (project.novelEpisodes?.length > 0) && (
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+            <Clapperboard className="w-16 h-16 text-[var(--text-muted)] mb-4 opacity-30" />
+            <p className="text-sm text-[var(--text-tertiary)] mb-2">请先选择一个剧本</p>
+            <p className="text-xs text-[var(--text-muted)] mb-4">在「剧集剧本」标签页中点击"使用此剧本创作"来选定一个剧本。</p>
+            <button
+              onClick={() => setActiveTab('episodes')}
+              className="px-4 py-2 text-xs font-medium rounded-lg bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] transition-colors"
+            >
+              前往选择剧本
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'script' && (project.selectedEpisodeId || !(project.novelEpisodes?.length > 0)) && (
           <SceneBreakdown
             project={project}
             editingCharacterId={editingCharacterId}

@@ -9,12 +9,13 @@ interface SidebarProps {
   setStage: (stage: 'script' | 'assets' | 'director' | 'export' | 'prompts') => void;
   onExit: () => void;
   projectName?: string;
+  activeEpisodeName?: string;
   onShowOnboarding?: () => void;
   onShowModelConfig?: () => void;
   isNavigationLocked?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, projectName, onShowOnboarding, onShowModelConfig, isNavigationLocked }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, projectName, activeEpisodeName, onShowOnboarding, onShowModelConfig, isNavigationLocked }) => {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const navItems = [
@@ -60,6 +61,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, proje
       <div className="px-6 py-4 border-b border-[var(--border-subtle)]">
          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest mb-1">当前项目</div>
          <div className="text-sm font-medium text-[var(--text-secondary)] truncate font-mono">{projectName || '未命名项目'}</div>
+         {activeEpisodeName ? (
+           <div className="mt-2 flex items-center gap-1.5">
+             <div className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
+             <span className="text-[10px] text-[var(--text-tertiary)] truncate">
+               当前剧本：{activeEpisodeName}
+             </span>
+           </div>
+         ) : (
+           <div className="mt-2 flex items-center gap-1.5">
+             <div className="w-1.5 h-1.5 rounded-full bg-[var(--warning)]" />
+             <span className="text-[10px] text-[var(--warning-text)]">
+               未选择剧本
+             </span>
+           </div>
+         )}
       </div>
 
       {/* Generation Lock Indicator */}
