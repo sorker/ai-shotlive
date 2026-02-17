@@ -1,0 +1,837 @@
+/**
+ * 后台任务运行器
+ *
+ * 管理生成任务的完整生命周期：
+ * 1. 创建任务 → 写入 DB（status=pending）
+ * 2. 执行任务 → 调用 AI API（status=running/polling）
+ * 3. 完成任务 → 存储结果，自动回写到项目数据（status=completed）
+ * 4. 恢复任务 → 服务器重启后恢复正在轮询的异步任务
+ */
+
+import { Pool, PoolConnection } from 'mysql2/promise';
+import { RowDataPacket } from 'mysql2';
+import {
+  createGenericAsyncVideoTask,
+  pollGenericAsyncVideoTask,
+  generateVeoSyncVideo,
+  createDashScopeVideoTask,
+  pollDashScopeVideoTask,
+  createSeedanceVideoTask,
+  pollSeedanceVideoTask,
+  generateGeminiImage,
+  generateOpenAIImage,
+  serverChatCompletion,
+} from './aiProxy.js';
+
+// ============================================
+// 类型定义
+// ============================================
+
+export interface TaskCreateParams {
+  type: 'video' | 'image' | 'chat';
+  projectId: string;
+  modelId: string;
+  prompt: string;
+
+  // 视频参数
+  startImage?: string;
+  endImage?: string;
+  aspectRatio?: string;
+  duration?: number;
+
+  // 图片参数
+  referenceImages?: string[];
+  isVariation?: boolean;
+  hasTurnaround?: boolean;
+
+  // 文本参数
+  temperature?: number;
+  maxTokens?: number;
+  responseFormat?: 'json_object';
+
+  // 结果写入目标
+  target?: {
+    type: string;         // 'keyframe' | 'video_interval' | 'character_image' | 'scene_image' | etc.
+    shotId?: string;
+    entityId?: string;    // keyframe ID, interval ID, character ID, etc.
+  };
+}
+
+export interface TaskRecord {
+  id: string;
+  user_id: number;
+  project_id: string;
+  type: string;
+  status: string;
+  params: string;        // JSON string
+  provider_task_id: string | null;
+  provider: string | null;
+  model_id: string | null;
+  result: string | null;
+  error: string | null;
+  progress: number;
+  target_type: string | null;
+  target_shot_id: string | null;
+  target_entity_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+  completed_at: Date | null;
+}
+
+interface ModelRegistryState {
+  providers: Array<{
+    id: string;
+    name: string;
+    baseUrl: string;
+    apiKey?: string;
+  }>;
+  models: Array<{
+    id: string;
+    apiModel?: string;
+    type: string;
+    providerId: string;
+    endpoint?: string;
+    params?: any;
+  }>;
+  activeModels: { chat: string; image: string; video: string };
+}
+
+// 内存中的运行任务追踪
+const runningTasks = new Map<string, { abort?: AbortController }>();
+
+// ============================================
+// 任务 CRUD
+// ============================================
+
+/**
+ * 创建新任务
+ */
+export const createTask = async (
+  pool: Pool,
+  userId: number,
+  params: TaskCreateParams
+): Promise<TaskRecord> => {
+  const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+
+  await pool.execute(
+    `INSERT INTO generation_tasks
+      (id, user_id, project_id, type, status, params, model_id, target_type, target_shot_id, target_entity_id)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+    [
+      taskId,
+      userId,
+      params.projectId,
+      params.type,
+      JSON.stringify(params),
+      params.modelId,
+      params.target?.type || null,
+      params.target?.shotId || null,
+      params.target?.entityId || null,
+    ]
+  );
+
+  console.log(`📋 [TaskRunner] 任务已创建: ${taskId} (${params.type}/${params.modelId})`);
+
+  // 立即启动任务执行
+  executeTask(pool, userId, taskId).catch(err => {
+    console.error(`❌ [TaskRunner] 任务执行失败: ${taskId}`, err.message);
+  });
+
+  return await getTask(pool, userId, taskId) as TaskRecord;
+};
+
+/**
+ * 获取任务详情
+ */
+export const getTask = async (
+  pool: Pool,
+  userId: number,
+  taskId: string
+): Promise<TaskRecord | null> => {
+  const [rows] = await pool.execute<(TaskRecord & RowDataPacket)[]>(
+    'SELECT * FROM generation_tasks WHERE id = ? AND user_id = ?',
+    [taskId, userId]
+  );
+  return rows.length > 0 ? rows[0] : null;
+};
+
+/**
+ * 获取用户的活跃任务列表
+ */
+export const getActiveTasks = async (
+  pool: Pool,
+  userId: number,
+  projectId?: string
+): Promise<TaskRecord[]> => {
+  if (projectId) {
+    const [rows] = await pool.execute<(TaskRecord & RowDataPacket)[]>(
+      `SELECT * FROM generation_tasks
+       WHERE user_id = ? AND project_id = ? AND status IN ('pending', 'running', 'polling')
+       ORDER BY created_at DESC`,
+      [userId, projectId]
+    );
+    return rows;
+  }
+
+  const [rows] = await pool.execute<(TaskRecord & RowDataPacket)[]>(
+    `SELECT * FROM generation_tasks
+     WHERE user_id = ? AND status IN ('pending', 'running', 'polling')
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return rows;
+};
+
+/**
+ * 获取项目的所有任务（包含已完成）
+ */
+export const getProjectTasks = async (
+  pool: Pool,
+  userId: number,
+  projectId: string,
+  limit: number = 50
+): Promise<TaskRecord[]> => {
+  const [rows] = await pool.execute<(TaskRecord & RowDataPacket)[]>(
+    `SELECT * FROM generation_tasks
+     WHERE user_id = ? AND project_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [userId, projectId, limit]
+  );
+  return rows;
+};
+
+/**
+ * 取消任务
+ */
+export const cancelTask = async (
+  pool: Pool,
+  userId: number,
+  taskId: string
+): Promise<boolean> => {
+  const task = await getTask(pool, userId, taskId);
+  if (!task || !['pending', 'running', 'polling'].includes(task.status)) {
+    return false;
+  }
+
+  // 中止内存中的运行任务
+  const running = runningTasks.get(taskId);
+  if (running?.abort) {
+    running.abort.abort();
+  }
+  runningTasks.delete(taskId);
+
+  await pool.execute(
+    `UPDATE generation_tasks SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ?`,
+    [taskId, userId]
+  );
+
+  console.log(`🚫 [TaskRunner] 任务已取消: ${taskId}`);
+  return true;
+};
+
+// ============================================
+// 参考图提示词包装
+// ============================================
+
+/**
+ * 当存在参考图片时，为提示词添加参考图使用指引
+ *
+ * 参考图的顺序约定（与前端 getRefImagesForShot 一致）：
+ *   1. 场景参考图（环境/氛围）
+ *   2. 角色参考图（外观，可能有九宫格造型图）
+ *   3. 道具参考图
+ *
+ * 这段包装告知图像生成 AI 每张图片的角色，确保模型正确使用场景和角色参考。
+ * 与前端 visualService.generateImage 中的包装逻辑保持同步。
+ */
+const wrapPromptWithReferenceGuide = (
+  prompt: string,
+  referenceImages: string[],
+  isVariation?: boolean,
+  hasTurnaround?: boolean
+): string => {
+  if (!referenceImages || referenceImages.length === 0) {
+    return prompt;
+  }
+
+  if (isVariation) {
+    return `⚠️⚠️⚠️ CRITICAL REQUIREMENTS - CHARACTER OUTFIT VARIATION ⚠️⚠️⚠️
+
+Reference Images Information:
+- The provided image shows the CHARACTER's BASE APPEARANCE that you MUST use as reference for FACE ONLY.
+
+Task:
+Generate a character image with a NEW OUTFIT/COSTUME based on this description: "${prompt}".
+
+⚠️ ABSOLUTE REQUIREMENTS (NON-NEGOTIABLE):
+
+1. FACE & IDENTITY - MUST BE 100% IDENTICAL TO REFERENCE:
+   • Facial Features: Eyes (color, shape, size), nose structure, mouth shape, facial contours must be EXACTLY the same
+   • Hairstyle & Hair Color: Length, color, texture, and style must be PERFECTLY matched (unless prompt specifies hair change)
+   • Skin tone and facial structure: MUST remain identical
+   • Expression can vary based on prompt
+
+2. OUTFIT/CLOTHING - MUST BE COMPLETELY DIFFERENT FROM REFERENCE:
+   • Generate NEW clothing/outfit as described in the prompt
+   • DO NOT copy the clothing from the reference image
+   • The outfit should match the description provided: "${prompt}"
+   • Include all accessories, props, or costume details mentioned in the prompt
+
+3. Body proportions should remain consistent with the reference.
+
+⚠️ This is an OUTFIT VARIATION task - The face MUST match the reference, but the CLOTHES MUST be NEW as described!
+⚠️ If the new outfit is not clearly visible and different from the reference, the task has FAILED!`;
+  }
+
+  const turnaroundGuide = hasTurnaround ? `
+4. CHARACTER TURNAROUND SHEET - MULTI-ANGLE REFERENCE:
+   Some character reference images are provided as a 3x3 TURNAROUND SHEET (9-panel grid showing the SAME character from different angles: front, side, back, 3/4 view, close-up, etc.).
+   ⚠️ This turnaround sheet is your MOST IMPORTANT reference for character consistency!
+   • Use the panel that best matches the CAMERA ANGLE of this shot (e.g., if the shot is from behind, refer to the back-view panel)
+   • The character's face, hair, clothing, and body proportions must match ALL panels in the turnaround sheet
+   • The turnaround sheet takes priority over single character reference images for angle-specific details
+` : '';
+
+  return `⚠️⚠️⚠️ CRITICAL REQUIREMENTS - CHARACTER CONSISTENCY ⚠️⚠️⚠️
+
+Reference Images Information:
+- The FIRST image is the Scene/Environment reference.
+- Subsequent images are Character references (Base Look or Variation).${hasTurnaround ? '\n- Some character images are 3x3 TURNAROUND SHEETS showing the character from 9 different angles (front, side, back, close-up, etc.).' : ''}
+- Any remaining images after characters are Prop/Item references (objects that must appear consistently).
+
+Task:
+Generate a cinematic shot matching this prompt: "${prompt}".
+
+⚠️ ABSOLUTE REQUIREMENTS (NON-NEGOTIABLE):
+1. Scene Consistency:
+   - STRICTLY maintain the visual style, lighting, and environment from the scene reference.
+
+2. Character Consistency - HIGHEST PRIORITY:
+   If characters are present in the prompt, they MUST be IDENTICAL to the character reference images:
+   • Facial Features: Eyes (color, shape, size), nose structure, mouth shape, facial contours must be EXACTLY the same
+   • Hairstyle & Hair Color: Length, color, texture, and style must be PERFECTLY matched
+   • Clothing & Outfit: Style, color, material, and accessories must be IDENTICAL
+   • Body Type: Height, build, proportions must remain consistent
+
+3. Prop/Item Consistency:
+   If prop reference images are provided, the objects/items in the shot MUST match the reference:
+   • Shape & Form: The prop's shape, size, and proportions must be identical to the reference
+   • Color & Material: Colors, textures, and materials must be consistent
+   • Details: Patterns, text, decorations, and distinguishing features must match exactly
+${turnaroundGuide}
+⚠️ DO NOT create variations or interpretations of the character - STRICT REPLICATION ONLY!
+⚠️ Character appearance consistency is THE MOST IMPORTANT requirement!
+⚠️ Props/items must also maintain visual consistency with their reference images!`;
+};
+
+// ============================================
+// 任务执行引擎
+// ============================================
+
+/**
+ * 执行任务（主入口）
+ */
+const executeTask = async (
+  pool: Pool,
+  userId: number,
+  taskId: string
+): Promise<void> => {
+  const task = await getTask(pool, userId, taskId);
+  if (!task || task.status !== 'pending') return;
+
+  const params: TaskCreateParams = JSON.parse(task.params);
+
+  // 标记为 running
+  await updateTaskStatus(pool, taskId, 'running');
+
+  // 获取用户的模型配置
+  const registry = await getUserModelRegistry(pool, userId);
+  if (!registry) {
+    await failTask(pool, taskId, '未找到模型配置，请先在模型配置页面设置 API Key');
+    return;
+  }
+
+  try {
+    let result: string;
+
+    switch (params.type) {
+      case 'video':
+        result = await executeVideoTask(pool, taskId, params, registry);
+        break;
+      case 'image':
+        result = await executeImageTask(pool, taskId, params, registry);
+        break;
+      case 'chat':
+        result = await executeChatTask(pool, taskId, params, registry);
+        break;
+      default:
+        throw new Error(`未知任务类型: ${params.type}`);
+    }
+
+    // 任务完成
+    await completeTask(pool, taskId, result);
+
+    // 自动回写结果到项目
+    if (params.target) {
+      await applyResultToProject(pool, userId, task.project_id, params.target, result);
+    }
+
+    console.log(`✅ [TaskRunner] 任务完成: ${taskId}`);
+  } catch (err: any) {
+    // 检查是否被取消
+    const current = await getTask(pool, userId, taskId);
+    if (current?.status === 'cancelled') return;
+
+    await failTask(pool, taskId, err.message || '未知错误');
+    console.error(`❌ [TaskRunner] 任务失败: ${taskId}`, err.message);
+  } finally {
+    runningTasks.delete(taskId);
+  }
+};
+
+/**
+ * 执行视频生成任务
+ */
+const executeVideoTask = async (
+  pool: Pool,
+  taskId: string,
+  params: TaskCreateParams,
+  registry: ModelRegistryState
+): Promise<string> => {
+  const { modelId, prompt, startImage, endImage, aspectRatio = '16:9', duration = 8 } = params;
+  const { apiBase, apiKey, model, provider } = resolveModelConfig(registry, 'video', modelId);
+
+  const actualModelName = model.apiModel || model.id || modelId;
+  const providerBaseUrl = provider?.baseUrl || '';
+
+  // DashScope (阿里百炼 万象)
+  if (
+    model.providerId === 'qwen' ||
+    providerBaseUrl.includes('dashscope.aliyuncs.com')
+  ) {
+    console.log(`  🔄 [TaskRunner] 使用 DashScope 适配器`);
+    const { taskId: providerTaskId } = await createDashScopeVideoTask({
+      apiKey, modelId: actualModelName, prompt,
+      startImage, endImage, aspectRatio, duration,
+    });
+    await updateProviderTaskId(pool, taskId, providerTaskId, 'dashscope');
+    await updateTaskStatus(pool, taskId, 'polling');
+
+    return await pollDashScopeVideoTask(apiKey, providerTaskId, (progress) => {
+      updateTaskProgress(pool, taskId, progress).catch(() => {});
+    });
+  }
+
+  // 火山引擎 Seedance（直连）
+  if (
+    model.providerId === 'doubao' &&
+    providerBaseUrl.includes('ark.cn-beijing.volces.com') &&
+    actualModelName.includes('seedance')
+  ) {
+    console.log(`  🔄 [TaskRunner] 使用 Seedance 适配器`);
+    const { taskId: providerTaskId } = await createSeedanceVideoTask({
+      apiKey, modelId: actualModelName, prompt,
+      startImage, endImage, aspectRatio, duration,
+    });
+    await updateProviderTaskId(pool, taskId, providerTaskId, 'seedance');
+    await updateTaskStatus(pool, taskId, 'polling');
+
+    return await pollSeedanceVideoTask(apiKey, providerTaskId, (progress) => {
+      updateTaskProgress(pool, taskId, progress).catch(() => {});
+    });
+  }
+
+  // 通用异步模式 (Sora, Veo-fast, Kling, Vidu, Seedance via proxy)
+  const isAsync =
+    (model.params as any)?.mode === 'async' ||
+    actualModelName === 'sora-2' ||
+    actualModelName.toLowerCase().startsWith('veo_3_1-fast') ||
+    actualModelName.includes('seedance');
+
+  if (isAsync) {
+    console.log(`  🔄 [TaskRunner] 使用通用异步模式`);
+    const { taskId: providerTaskId } = await createGenericAsyncVideoTask({
+      apiBase, apiKey, modelName: actualModelName, prompt,
+      startImage, endImage, aspectRatio, duration,
+    });
+    await updateProviderTaskId(pool, taskId, providerTaskId, 'generic-async');
+    await updateTaskStatus(pool, taskId, 'polling');
+
+    return await pollGenericAsyncVideoTask(
+      apiBase, apiKey, providerTaskId, actualModelName,
+      (progress) => { updateTaskProgress(pool, taskId, progress).catch(() => {}); }
+    );
+  }
+
+  // Veo 同步模式
+  console.log(`  🔄 [TaskRunner] 使用 Veo 同步模式`);
+  return await generateVeoSyncVideo({
+    apiBase, apiKey, modelName: actualModelName, prompt,
+    startImage, endImage, aspectRatio,
+  });
+};
+
+/**
+ * 执行图片生成任务
+ */
+const executeImageTask = async (
+  pool: Pool,
+  taskId: string,
+  params: TaskCreateParams,
+  registry: ModelRegistryState
+): Promise<string> => {
+  const { modelId, prompt, referenceImages = [], aspectRatio = '16:9', isVariation, hasTurnaround } = params;
+  const { apiBase, apiKey, model } = resolveModelConfig(registry, 'image', modelId);
+
+  const actualModelId = model.apiModel || model.id || modelId;
+  const endpoint = model.endpoint || `/v1beta/models/${actualModelId}:generateContent`;
+  const apiFormat = (model.params as any)?.apiFormat || 'gemini';
+
+  // 诊断日志：参考图信息
+  const refImgSummary = referenceImages.map((img, i) => {
+    if (!img) return `  [${i}] (空)`;
+    if (img.startsWith('data:image/')) return `  [${i}] base64 data URL (${Math.round(img.length / 1024)}KB)`;
+    if (/^https?:\/\//i.test(img)) return `  [${i}] HTTP URL: ${img.substring(0, 80)}...`;
+    return `  [${i}] 未知格式 (${img.substring(0, 30)}...)`;
+  });
+  console.log(`  🖼️ [TaskRunner] 图片任务 ${taskId}: ${referenceImages.length} 张参考图, apiFormat=${apiFormat}, hasTurnaround=${!!hasTurnaround}`);
+  if (refImgSummary.length > 0) {
+    console.log(`  📋 参考图详情:\n${refImgSummary.join('\n')}`);
+  }
+
+  // 当有参考图片时，为提示词添加参考图指令包装
+  // 告知 AI 模型每张参考图的角色（场景/角色/道具），确保模型正确使用参考图
+  const finalPrompt = wrapPromptWithReferenceGuide(prompt, referenceImages, isVariation, hasTurnaround);
+
+  if (apiFormat === 'openai-image') {
+    const result = await generateOpenAIImage({
+      apiBase, apiKey, endpoint, modelId: actualModelId,
+      prompt: finalPrompt, referenceImages, aspectRatio,
+    });
+    // OpenAI-image API 返回结构化结果（base64 + 原始 URL）
+    // 编码为 JSON 以便前端同时获取 base64（显示用）和 URL（Seedream 参考图用）
+    if (result.originalUrl) {
+      return JSON.stringify({ base64: result.base64, url: result.originalUrl });
+    }
+    return result.base64;
+  }
+
+  // Gemini generateContent 格式（默认）
+  return await generateGeminiImage({
+    apiBase, apiKey, endpoint, modelId: actualModelId,
+    prompt: finalPrompt, referenceImages, aspectRatio,
+  });
+};
+
+/**
+ * 执行文本生成任务
+ */
+const executeChatTask = async (
+  pool: Pool,
+  taskId: string,
+  params: TaskCreateParams,
+  registry: ModelRegistryState
+): Promise<string> => {
+  const { modelId, prompt, temperature, responseFormat } = params;
+  const { apiBase, apiKey, model } = resolveModelConfig(registry, 'chat', modelId);
+
+  const actualModel = model.apiModel || model.id || modelId;
+  const endpoint = model.endpoint || '/v1/chat/completions';
+
+  return await serverChatCompletion({
+    apiBase, apiKey, endpoint, model: actualModel,
+    prompt, temperature, responseFormat,
+  });
+};
+
+// ============================================
+// 结果回写到项目
+// ============================================
+
+/**
+ * 将生成结果自动写入项目对应的位置
+ */
+const applyResultToProject = async (
+  pool: Pool,
+  userId: number,
+  projectId: string,
+  target: NonNullable<TaskCreateParams['target']>,
+  result: string
+): Promise<void> => {
+  // 解析结构化结果（OpenAI-image 返回 JSON 含 base64 + url）
+  let base64Result = result;
+  let urlResult: string | null = null;
+  if (result.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed.base64) {
+        base64Result = parsed.base64;
+        urlResult = parsed.url || null;
+      }
+    } catch { /* 非 JSON，当作普通 base64 */ }
+  }
+
+  try {
+    switch (target.type) {
+      case 'keyframe':
+        if (target.entityId && target.shotId) {
+          await pool.execute(
+            `UPDATE shot_keyframes SET image_url = ?, status = 'completed'
+             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
+            [base64Result, target.entityId, target.shotId, projectId, userId]
+          );
+          console.log(`  📝 [TaskRunner] 关键帧已回写: ${target.entityId}`);
+        }
+        break;
+
+      case 'video_interval':
+        if (target.entityId && target.shotId) {
+          await pool.execute(
+            `UPDATE shot_video_intervals SET video_url = ?, status = 'completed'
+             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
+            [base64Result, target.entityId, target.shotId, projectId, userId]
+          );
+          console.log(`  📝 [TaskRunner] 视频片段已回写: ${target.entityId}`);
+        }
+        break;
+
+      case 'character_image':
+        if (target.entityId) {
+          await pool.execute(
+            `UPDATE script_characters SET reference_image = ?, reference_image_url = ?, status = 'completed'
+             WHERE id = ? AND project_id = ? AND user_id = ?`,
+            [base64Result, urlResult, target.entityId, projectId, userId]
+          );
+          console.log(`  📝 [TaskRunner] 角色图片已回写: ${target.entityId}${urlResult ? ' (含原始URL)' : ''}`);
+        }
+        break;
+
+      case 'scene_image':
+        if (target.entityId) {
+          await pool.execute(
+            `UPDATE script_scenes SET reference_image = ?, reference_image_url = ?, status = 'completed'
+             WHERE id = ? AND project_id = ? AND user_id = ?`,
+            [base64Result, urlResult, target.entityId, projectId, userId]
+          );
+          console.log(`  📝 [TaskRunner] 场景图片已回写: ${target.entityId}${urlResult ? ' (含原始URL)' : ''}`);
+        }
+        break;
+
+      case 'turnaround':
+        if (target.entityId) {
+          await pool.execute(
+            `UPDATE shots SET nine_grid_image = ?, nine_grid_status = 'completed'
+             WHERE id = ? AND project_id = ? AND user_id = ?`,
+            [result, target.entityId, projectId, userId]
+          );
+          console.log(`  📝 [TaskRunner] 九宫格已回写: ${target.entityId}`);
+        }
+        break;
+
+      default:
+        console.log(`  ℹ️ [TaskRunner] 未知 target.type: ${target.type}，跳过回写`);
+    }
+  } catch (err: any) {
+    console.error(`  ⚠️ [TaskRunner] 结果回写失败:`, err.message);
+    // 回写失败不影响任务状态，结果仍保存在 generation_tasks 表中
+  }
+};
+
+// ============================================
+// 任务恢复（服务器重启后）
+// ============================================
+
+/**
+ * 恢复未完成的轮询任务
+ * 在服务器启动时调用，恢复所有 status='polling' 的任务
+ */
+export const recoverTasks = async (pool: Pool): Promise<void> => {
+  const [rows] = await pool.execute<(TaskRecord & RowDataPacket)[]>(
+    `SELECT * FROM generation_tasks WHERE status IN ('polling', 'running') ORDER BY created_at ASC`
+  );
+
+  if (rows.length === 0) {
+    console.log('🔄 [TaskRunner] 无需恢复的任务');
+    return;
+  }
+
+  console.log(`🔄 [TaskRunner] 发现 ${rows.length} 个需要恢复的任务`);
+
+  for (const task of rows) {
+    // 对于 'running' 状态的非轮询任务（同步 API 调用），标记为失败
+    if (task.status === 'running' && !task.provider_task_id) {
+      await failTask(pool, task.id, '服务器重启，同步任务已中断');
+      console.log(`  ❌ 同步任务 ${task.id} 已标记失败（不可恢复）`);
+      continue;
+    }
+
+    // 对于有 provider_task_id 的轮询任务，恢复轮询
+    if (task.provider_task_id) {
+      console.log(`  🔄 恢复轮询任务: ${task.id} (provider: ${task.provider}, taskId: ${task.provider_task_id})`);
+      recoverPollingTask(pool, task).catch(err => {
+        console.error(`  ❌ 恢复任务 ${task.id} 失败:`, err.message);
+      });
+    }
+  }
+};
+
+/**
+ * 恢复单个轮询任务
+ */
+const recoverPollingTask = async (
+  pool: Pool,
+  task: TaskRecord
+): Promise<void> => {
+  const params: TaskCreateParams = JSON.parse(task.params);
+  const registry = await getUserModelRegistry(pool, task.user_id);
+  if (!registry) {
+    await failTask(pool, task.id, '恢复失败：未找到模型配置');
+    return;
+  }
+
+  try {
+    const { apiKey, apiBase } = resolveModelConfig(registry, params.type as any, params.modelId);
+    let result: string;
+
+    switch (task.provider) {
+      case 'dashscope':
+        result = await pollDashScopeVideoTask(apiKey, task.provider_task_id!, (progress) => {
+          updateTaskProgress(pool, task.id, progress).catch(() => {});
+        });
+        break;
+
+      case 'seedance':
+        result = await pollSeedanceVideoTask(apiKey, task.provider_task_id!, (progress) => {
+          updateTaskProgress(pool, task.id, progress).catch(() => {});
+        });
+        break;
+
+      case 'generic-async':
+        result = await pollGenericAsyncVideoTask(
+          apiBase, apiKey, task.provider_task_id!, params.modelId,
+          (progress) => { updateTaskProgress(pool, task.id, progress).catch(() => {}); }
+        );
+        break;
+
+      default:
+        await failTask(pool, task.id, `恢复失败：未知 provider: ${task.provider}`);
+        return;
+    }
+
+    await completeTask(pool, task.id, result);
+
+    if (params.target) {
+      await applyResultToProject(pool, task.user_id, task.project_id, params.target, result);
+    }
+
+    console.log(`  ✅ 恢复任务完成: ${task.id}`);
+  } catch (err: any) {
+    await failTask(pool, task.id, `恢复后执行失败: ${err.message}`);
+  }
+};
+
+// ============================================
+// DB 操作辅助
+// ============================================
+
+const updateTaskStatus = async (pool: Pool, taskId: string, status: string): Promise<void> => {
+  await pool.execute(
+    'UPDATE generation_tasks SET status = ?, updated_at = NOW() WHERE id = ?',
+    [status, taskId]
+  );
+};
+
+const updateProviderTaskId = async (
+  pool: Pool, taskId: string, providerTaskId: string, provider: string
+): Promise<void> => {
+  await pool.execute(
+    'UPDATE generation_tasks SET provider_task_id = ?, provider = ?, updated_at = NOW() WHERE id = ?',
+    [providerTaskId, provider, taskId]
+  );
+};
+
+const updateTaskProgress = async (pool: Pool, taskId: string, progress: number): Promise<void> => {
+  await pool.execute(
+    'UPDATE generation_tasks SET progress = ?, updated_at = NOW() WHERE id = ?',
+    [progress, taskId]
+  );
+};
+
+const completeTask = async (pool: Pool, taskId: string, result: string): Promise<void> => {
+  await pool.execute(
+    `UPDATE generation_tasks SET status = 'completed', result = ?, progress = 100,
+     completed_at = NOW(), updated_at = NOW() WHERE id = ?`,
+    [result, taskId]
+  );
+};
+
+const failTask = async (pool: Pool, taskId: string, error: string): Promise<void> => {
+  await pool.execute(
+    `UPDATE generation_tasks SET status = 'failed', error = ?, updated_at = NOW() WHERE id = ?`,
+    [error.substring(0, 2000), taskId]
+  );
+};
+
+// ============================================
+// 模型配置解析
+// ============================================
+
+/**
+ * 从用户的模型注册表中获取配置
+ */
+const getUserModelRegistry = async (
+  pool: Pool,
+  userId: number
+): Promise<ModelRegistryState | null> => {
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    'SELECT data FROM model_registry WHERE user_id = ?',
+    [userId]
+  );
+  if (rows.length === 0) return null;
+  try {
+    return JSON.parse(rows[0].data);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 解析模型配置：获取 apiBase, apiKey, model 定义
+ */
+const resolveModelConfig = (
+  registry: ModelRegistryState,
+  type: 'chat' | 'image' | 'video',
+  modelId: string
+): {
+  apiBase: string;
+  apiKey: string;
+  model: ModelRegistryState['models'][0];
+  provider: ModelRegistryState['providers'][0] | undefined;
+} => {
+  // 查找模型
+  let model = registry.models.find(m => m.id === modelId && m.type === type);
+  if (!model) {
+    // 尝试按 apiModel 匹配
+    model = registry.models.find(m => m.apiModel === modelId && m.type === type);
+  }
+  if (!model) {
+    // 使用激活模型
+    const activeId = registry.activeModels[type];
+    model = registry.models.find(m => m.id === activeId);
+  }
+  if (!model) {
+    throw new Error(`未找到模型: ${modelId} (${type})`);
+  }
+
+  // 查找提供商
+  const provider = registry.providers.find(p => p.id === model!.providerId);
+  const apiKey = provider?.apiKey;
+  if (!apiKey) {
+    throw new Error(`模型 ${model.id} 的提供商 ${model.providerId} 未设置 API Key`);
+  }
+
+  const apiBase = (provider?.baseUrl || 'https://api.antsk.cn').replace(/\/+$/, '');
+
+  return { apiBase, apiKey, model, provider };
+};

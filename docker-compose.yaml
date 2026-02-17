@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  bigbanana-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bigbanana-ai-app
+    ports:
+      - "3005:3001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - cinegen-network
+
+networks:
+  cinegen-network:
+    driver: bridge

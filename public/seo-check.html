@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO 检查工具 - BigBanana AI Director</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #050505;
+            color: #e5e5e5;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        .subtitle {
+            color: #888;
+            margin-bottom: 40px;
+            font-size: 14px;
+        }
+        .check-section {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .check-section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status.success {
+            background: #0f4c2f;
+            color: #4ade80;
+        }
+        .status.error {
+            background: #4c0f0f;
+            color: #f87171;
+        }
+        .status.warning {
+            background: #4c3f0f;
+            color: #fbbf24;
+        }
+        .check-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            margin: 8px 0;
+            background: #141414;
+            border-radius: 8px;
+            border-left: 3px solid transparent;
+        }
+        .check-item.pass {
+            border-left-color: #4ade80;
+        }
+        .check-item.fail {
+            border-left-color: #f87171;
+        }
+        .check-item.warn {
+            border-left-color: #fbbf24;
+        }
+        .icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .content {
+            flex: 1;
+        }
+        .label {
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .description {
+            font-size: 13px;
+            color: #888;
+        }
+        .value {
+            font-size: 12px;
+            color: #aaa;
+            background: #1a1a1a;
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: 8px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+        }
+        button {
+            background: #fff;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #e5e5e5;
+            transform: translateY(-1px);
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 30px;
+        }
+        .summary {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .summary-card {
+            flex: 1;
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .summary-number {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .summary-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 SEO 检查工具</h1>
+        <p class="subtitle">BigBanana AI Director - 自动检测页面 SEO 配置</p>
+
+        <div class="summary" id="summary">
+            <div class="summary-card">
+                <div class="summary-number" style="color: #4ade80;" id="passCount">0</div>
+                <div class="summary-label">通过</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-number" style="color: #fbbf24;" id="warnCount">0</div>
+                <div class="summary-label">警告</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-number" style="color: #f87171;" id="failCount">0</div>
+                <div class="summary-label">失败</div>
+            </div>
+        </div>
+
+        <div id="results"></div>
+
+        <div class="button-group">
+            <button onclick="runCheck()">🔄 重新检查</button>
+            <button onclick="window.location.href='/'">← 返回首页</button>
+        </div>
+    </div>
+
+    <script>
+        const checks = [
+            {
+                category: "基础 Meta 标签",
+                items: [
+                    { name: "页面标题", selector: "title", type: "text", minLength: 30, maxLength: 65 },
+                    { name: "页面描述", selector: "meta[name='description']", type: "content", minLength: 100, maxLength: 200 },
+                    { name: "关键词", selector: "meta[name='keywords']", type: "content" },
+                    { name: "语言标识", selector: "html[lang]", type: "attribute", attribute: "lang", expected: "zh-CN" },
+                    { name: "字符编码", selector: "meta[charset]", type: "attribute", attribute: "charset", expected: "UTF-8" },
+                    { name: "Viewport", selector: "meta[name='viewport']", type: "content" },
+                    { name: "Robots", selector: "meta[name='robots']", type: "content" },
+                    { name: "作者", selector: "meta[name='author']", type: "content" },
+                    { name: "应用名称", selector: "meta[name='application-name']", type: "content" }
+                ]
+            },
+            {
+                category: "Open Graph 标签",
+                items: [
+                    { name: "OG 类型", selector: "meta[property='og:type']", type: "content" },
+                    { name: "OG 标题", selector: "meta[property='og:title']", type: "content", minLength: 30 },
+                    { name: "OG 描述", selector: "meta[property='og:description']", type: "content", minLength: 80 },
+                    { name: "OG 图片", selector: "meta[property='og:image']", type: "content" },
+                    { name: "OG 图片 Alt", selector: "meta[property='og:image:alt']", type: "content" },
+                    { name: "OG URL", selector: "meta[property='og:url']", type: "content" },
+                    { name: "OG Locale", selector: "meta[property='og:locale']", type: "content" },
+                    { name: "OG 站点名称", selector: "meta[property='og:site_name']", type: "content" }
+                ]
+            },
+            {
+                category: "Twitter Card",
+                items: [
+                    { name: "Twitter 卡片类型", selector: "meta[name='twitter:card']", type: "content" },
+                    { name: "Twitter 标题", selector: "meta[name='twitter:title']", type: "content" },
+                    { name: "Twitter 描述", selector: "meta[name='twitter:description']", type: "content" },
+                    { name: "Twitter 图片", selector: "meta[name='twitter:image']", type: "content" },
+                    { name: "Twitter 图片 Alt", selector: "meta[name='twitter:image:alt']", type: "content" }
+                ]
+            },
+            {
+                category: "结构化数据 (JSON-LD)",
+                items: [
+                    { name: "SoftwareApplication Schema", selector: "script[type='application/ld+json']", type: "exists" },
+                    { name: "FAQPage Schema", selector: "script[type='application/ld+json']", type: "jsonld-count", expected: "6" }
+                ]
+            },
+            {
+                category: "多语言与国际化",
+                items: [
+                    { name: "hreflang zh-CN", selector: "link[hreflang='zh-CN']", type: "href" },
+                    { name: "hreflang en", selector: "link[hreflang='en']", type: "href" },
+                    { name: "hreflang ja", selector: "link[hreflang='ja']", type: "href" },
+                    { name: "hreflang x-default", selector: "link[hreflang='x-default']", type: "href" }
+                ]
+            },
+            {
+                category: "其他重要标签",
+                items: [
+                    { name: "Canonical URL", selector: "link[rel='canonical']", type: "href" },
+                    { name: "Favicon (ICO)", selector: "link[rel='icon'][type='image/x-icon']", type: "href" },
+                    { name: "Apple Touch Icon", selector: "link[rel='apple-touch-icon']", type: "href" },
+                    { name: "主题颜色 (暗色)", selector: "meta[name='theme-color'][media='(prefers-color-scheme: dark)']", type: "content" },
+                    { name: "主题颜色 (亮色)", selector: "meta[name='theme-color'][media='(prefers-color-scheme: light)']", type: "content" },
+                    { name: "MS Tile Color", selector: "meta[name='msapplication-TileColor']", type: "content" }
+                ]
+            }
+        ];
+
+        function runCheck() {
+            let passCount = 0, warnCount = 0, failCount = 0;
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            checks.forEach(section => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'check-section';
+                
+                let sectionHTML = `<h2>${section.category}</h2>`;
+                
+                section.items.forEach(item => {
+                    const element = document.querySelector(item.selector);
+                    let status = 'fail';
+                    let icon = '❌';
+                    let value = '';
+                    let description = '';
+
+                    if (element) {
+                        if (item.type === 'text') {
+                            value = element.textContent || '';
+                        } else if (item.type === 'content') {
+                            value = element.getAttribute('content') || '';
+                        } else if (item.type === 'href') {
+                            value = element.getAttribute('href') || '';
+                        } else if (item.type === 'attribute') {
+                            value = element.getAttribute(item.attribute) || '';
+                        } else if (item.type === 'exists') {
+                            value = '已找到';
+                        } else if (item.type === 'jsonld-count') {
+                            const allJsonLd = document.querySelectorAll('script[type="application/ld+json"]');
+                            value = `找到 ${allJsonLd.length} 个 JSON-LD 结构化数据块`;
+                        }
+
+                        if (value) {
+                            status = 'pass';
+                            icon = '✅';
+                            passCount++;
+
+                            // 检查长度
+                            if (item.minLength && value.length < item.minLength) {
+                                status = 'warn';
+                                icon = '⚠️';
+                                description = `长度过短（${value.length} < ${item.minLength}）`;
+                                warnCount++;
+                                passCount--;
+                            }
+                            if (item.maxLength && value.length > item.maxLength) {
+                                status = 'warn';
+                                icon = '⚠️';
+                                description = `长度过长（${value.length} > ${item.maxLength}）`;
+                                warnCount++;
+                                passCount--;
+                            }
+
+                            // 检查期望值
+                            if (item.expected && value !== item.expected) {
+                                status = 'warn';
+                                icon = '⚠️';
+                                description = `期望值: ${item.expected}`;
+                                warnCount++;
+                                passCount--;
+                            }
+                        } else {
+                            failCount++;
+                        }
+                    } else {
+                        failCount++;
+                    }
+
+                    sectionHTML += `
+                        <div class="check-item ${status}">
+                            <div class="icon">${icon}</div>
+                            <div class="content">
+                                <div class="label">${item.name}</div>
+                                ${description ? `<div class="description">${description}</div>` : ''}
+                                ${value ? `<div class="value">${value.substring(0, 200)}${value.length > 200 ? '...' : ''}</div>` : '<div class="description">未找到</div>'}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                sectionDiv.innerHTML = sectionHTML;
+                resultsDiv.appendChild(sectionDiv);
+            });
+
+            // 更新统计
+            document.getElementById('passCount').textContent = passCount;
+            document.getElementById('warnCount').textContent = warnCount;
+            document.getElementById('failCount').textContent = failCount;
+
+            // 检查外部文件
+            checkExternalFiles();
+        }
+
+        async function checkExternalFiles() {
+            const filesSection = document.createElement('div');
+            filesSection.className = 'check-section';
+            filesSection.innerHTML = '<h2>外部文件检查</h2>';
+
+            const files = [
+                { name: 'robots.txt', url: '/robots.txt' },
+                { name: 'sitemap.xml', url: '/sitemap.xml' }
+            ];
+
+            for (const file of files) {
+                try {
+                    const response = await fetch(file.url);
+                    const status = response.ok ? 'pass' : 'fail';
+                    const icon = response.ok ? '✅' : '❌';
+                    
+                    filesSection.innerHTML += `
+                        <div class="check-item ${status}">
+                            <div class="icon">${icon}</div>
+                            <div class="content">
+                                <div class="label">${file.name}</div>
+                                <div class="description">${response.ok ? `状态码: ${response.status}` : '文件未找到'}</div>
+                            </div>
+                        </div>
+                    `;
+                } catch (error) {
+                    filesSection.innerHTML += `
+                        <div class="check-item fail">
+                            <div class="icon">❌</div>
+                            <div class="content">
+                                <div class="label">${file.name}</div>
+                                <div class="description">检查失败: ${error.message}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            document.getElementById('results').appendChild(filesSection);
+        }
+
+        // 页面加载时自动运行检查
+        window.addEventListener('load', runCheck);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
