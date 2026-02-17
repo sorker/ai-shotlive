@@ -149,7 +149,7 @@ const CHARACTER_FIELDS: FieldMap = {
 
 router.post('/:id/characters', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId } = req.params;
+  const projectId = req.params.id as string;
   const userId = req.userId!;
   const ch = req.body;
 
@@ -287,7 +287,8 @@ const VARIATION_FIELDS: FieldMap = {
 
 router.post('/:id/characters/:charId/variations', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId, charId } = req.params;
+  const projectId = req.params.id as string;
+  const charId = req.params.charId as string;
   const userId = req.userId!;
   const v = req.body;
 
@@ -379,7 +380,7 @@ const SCENE_FIELDS: FieldMap = {
 
 router.post('/:id/scenes', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId } = req.params;
+  const projectId = req.params.id as string;
   const userId = req.userId!;
   const s = req.body;
 
@@ -471,7 +472,7 @@ const PROP_FIELDS: FieldMap = {
 
 router.post('/:id/props', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId } = req.params;
+  const projectId = req.params.id as string;
   const userId = req.userId!;
   const p = req.body;
 
@@ -564,7 +565,7 @@ const SHOT_FIELDS: FieldMap = {
 
 router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId } = req.params;
+  const projectId = req.params.id as string;
   const userId = req.userId!;
   const shot = req.body;
   const insertAfterSortOrder = req.body._insertAfterSortOrder;
@@ -1116,7 +1117,7 @@ router.delete('/:id/episodes/:episodeId', async (req: AuthRequest, res: Response
  */
 router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId } = req.params;
+  const projectId = req.params.id as string;
   const userId = req.userId!;
   const { scriptData, shots, projectUpdates } = req.body;
 
@@ -1308,7 +1309,8 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
  */
 router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) => {
   const pool = getPool();
-  const { id: projectId, shotId } = req.params;
+  const projectId = req.params.id as string;
+  const shotId = req.params.shotId as string;
   const userId = req.userId!;
   const { newShots } = req.body;
 
