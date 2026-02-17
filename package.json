@@ -18,6 +18,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.554.0",

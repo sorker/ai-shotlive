@@ -35,10 +35,6 @@ COPY --from=builder /app/dist ./dist
 # 从构建阶段复制后端构建产物
 COPY --from=builder /app/server/dist ./server/dist
 
-# 复制静态资源
-COPY --from=builder /app/favicon.ico ./dist/
-COPY --from=builder /app/qrcode.png ./dist/
-
 # 复制 nginx 配置（用于参考，实际使用 Express 提供服务）
 COPY nginx.conf ./nginx.conf
 

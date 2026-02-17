@@ -20,6 +20,7 @@ import uploadRoutes from './routes/uploads.js';
 import preferencesRoutes from './routes/preferences.js';
 import taskRoutes from './routes/tasks.js';
 import { recoverTasks } from './services/taskRunner.js';
+import { mountProxy } from './proxy.js';
 
 const app = express();
 const PORT = parseInt(process.env.SERVER_PORT || '3001', 10);
@@ -30,6 +31,9 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 已创建 uploads 目录');
 }
+
+// 第三方 API 代理（放在 body 解析前，生产环境与 Vite/nginx 行为一致）
+mountProxy(app);
 
 // 中间件
 app.use(cors());

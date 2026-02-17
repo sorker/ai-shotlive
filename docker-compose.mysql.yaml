@@ -1,0 +1,53 @@
+# 使用 MySQL 容器：应用 + MySQL 同栈，数据持久化在容器卷中
+# 生产环境仅 Node 一个进程，前后端与 /api/proxy 均由 Node 提供，对外暴露 80 端口
+# 使用方式: docker compose -f docker-compose.mysql.yaml up -d --build
+
+services:
+  bigbanana-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bigbanana-ai-app
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_PORT=3306
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - cinegen-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: bigbanana-ai-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-banana}
+      MYSQL_USER: ${DB_USER:-banana}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-banana}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cinegen-network
+
+networks:
+  cinegen-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
