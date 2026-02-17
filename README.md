@@ -264,15 +264,6 @@ BigBanana-AI-Director/
 
 ---
 
-## 交流与客户端
-
-**加入交流群**：扫码加入【大香蕉】产品体验群，获取更新与交流：
-
-<div align="center">
-<img src="./images/qrcode.jpg" width="300" alt="微信群二维码">
-<p><i>微信扫码加入交流群</i></p>
-</div>
-
 **Windows 客户端**（开箱即用）：[下载 BigBanana AI Director 安装包](https://tree456.oss-cn-beijing.aliyuncs.com/BigBanana%20AI%20Director%20Setup%201.0.0.exe?Expires=1770908400&OSSAccessKeyId=TMP.3KofXPaUNdnvbUpRP5MqiRmMMxuGwiftTgQfn7U3ntRtFvMYHpMB2kPb17r7rPXksvo7DFncrz4dWSfs3K33wVgGXfnCy4&Signature=wiOZbN%2BcZNuyZdiEI3KR1CqkFhM%3D)
 
 **轻量创作工具**：[BigBanana 创作工坊](https://bigbanana.tree456.com/) — AI 绘图、PPT、视频、小红书文案、小说、动漫等，浏览器即用。本项目更适合**系统化短剧制作与工业化工作流**。
