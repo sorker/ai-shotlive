@@ -8,7 +8,7 @@ import { Clapperboard, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, Chevr
 import { useAlert } from '../GlobalAlert';
 import * as PS from '../../services/projectPatchService';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 interface Props {
   project: ProjectState;

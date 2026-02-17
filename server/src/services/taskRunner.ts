@@ -10,6 +10,7 @@
 
 import { Pool, PoolConnection } from 'mysql2/promise';
 import { RowDataPacket } from 'mysql2';
+import { resolveToFilePath } from './fileStorage.js';
 import {
   createGenericAsyncVideoTask,
   pollGenericAsyncVideoTask,
@@ -576,56 +577,62 @@ const applyResultToProject = async (
     switch (target.type) {
       case 'keyframe':
         if (target.entityId && target.shotId) {
+          // base64 → 保存为文件，DB 存文件路径
+          const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result);
           await pool.execute(
             `UPDATE shot_keyframes SET image_url = ?, status = 'completed'
              WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
-            [base64Result, target.entityId, target.shotId, projectId, userId]
+            [filePath, target.entityId, target.shotId, projectId, userId]
           );
-          console.log(`  📝 [TaskRunner] 关键帧已回写: ${target.entityId}`);
+          console.log(`  📝 [TaskRunner] 关键帧已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
         break;
 
       case 'video_interval':
         if (target.entityId && target.shotId) {
+          const filePath = resolveToFilePath(projectId, 'video', target.entityId, base64Result);
           await pool.execute(
             `UPDATE shot_video_intervals SET video_url = ?, status = 'completed'
              WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
-            [base64Result, target.entityId, target.shotId, projectId, userId]
+            [filePath, target.entityId, target.shotId, projectId, userId]
           );
-          console.log(`  📝 [TaskRunner] 视频片段已回写: ${target.entityId}`);
+          console.log(`  📝 [TaskRunner] 视频片段已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
         break;
 
       case 'character_image':
         if (target.entityId) {
+          const filePath = resolveToFilePath(projectId, 'character', target.entityId, base64Result);
           await pool.execute(
             `UPDATE script_characters SET reference_image = ?, reference_image_url = ?, status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?`,
-            [base64Result, urlResult, target.entityId, projectId, userId]
+            [filePath, urlResult, target.entityId, projectId, userId]
           );
-          console.log(`  📝 [TaskRunner] 角色图片已回写: ${target.entityId}${urlResult ? ' (含原始URL)' : ''}`);
+          console.log(`  📝 [TaskRunner] 角色图片已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
         break;
 
       case 'scene_image':
         if (target.entityId) {
+          const filePath = resolveToFilePath(projectId, 'scene', target.entityId, base64Result);
           await pool.execute(
             `UPDATE script_scenes SET reference_image = ?, reference_image_url = ?, status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?`,
-            [base64Result, urlResult, target.entityId, projectId, userId]
+            [filePath, urlResult, target.entityId, projectId, userId]
           );
-          console.log(`  📝 [TaskRunner] 场景图片已回写: ${target.entityId}${urlResult ? ' (含原始URL)' : ''}`);
+          console.log(`  📝 [TaskRunner] 场景图片已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
         break;
 
       case 'turnaround':
         if (target.entityId) {
+          const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result);
           await pool.execute(
             `UPDATE shots SET nine_grid_image = ?, nine_grid_status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?`,
-            [result, target.entityId, projectId, userId]
+            [filePath, target.entityId, projectId, userId]
           );
-          console.log(`  📝 [TaskRunner] 九宫格已回写: ${target.entityId}`);
+          console.log(`  📝 [TaskRunner] 九宫格已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
         break;
 
@@ -634,7 +641,6 @@ const applyResultToProject = async (
     }
   } catch (err: any) {
     console.error(`  ⚠️ [TaskRunner] 结果回写失败:`, err.message);
-    // 回写失败不影响任务状态，结果仍保存在 generation_tasks 表中
   }
 };
 

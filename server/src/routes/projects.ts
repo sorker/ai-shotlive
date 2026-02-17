@@ -4,12 +4,13 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { RowDataPacket } from 'mysql2';
 import {
   saveProjectNormalized,
-  fetchBase64Backup,
+  fetchImageBackup,
   loadProjectNormalized,
   loadProjectList,
   exportAllProjects,
 } from '../services/projectStorage.js';
 import { withProjectLock } from '../utils/projectMutex.js';
+import { isFilePath, readFileAsBuffer, isBase64DataUri } from '../services/fileStorage.js';
 
 const router = Router();
 
@@ -87,7 +88,7 @@ async function saveProjectWithRetry(
 
   // Pre-fetch base64 backup OUTSIDE the transaction to reduce lock duration.
   // These are read-only SELECTs that don't need transactional isolation.
-  const backup = await fetchBase64Backup(pool, userId, project.id);
+  const backup = await fetchImageBackup(pool, userId, project.id);
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const conn = await pool.getConnection();
@@ -147,11 +148,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /api/projects/:id/image/:entityType/:entityId - 按需获取图片 base64
+ * GET /api/projects/:id/image/:entityType/:entityId - 获取图片
  *
- * 当 referenceImageUrl (CDN URL) 过期无法显示时，
- * 前端通过此端点从 DB 获取 base64 作为回退。
- * entityType: character | scene | prop | variation
+ * 支持两种存储方式：
+ * 1. 文件路径（data/xxx/...）→ 从磁盘读取文件
+ * 2. base64 data URI（旧数据兼容）→ 解码后返回二进制
+ *
+ * entityType: character | scene | prop | variation | keyframe | turnaround | ninegrid
  */
 router.get('/:id/image/:entityType/:entityId', async (req: AuthRequest, res: Response) => {
   try {
@@ -161,6 +164,7 @@ router.get('/:id/image/:entityType/:entityId', async (req: AuthRequest, res: Res
 
     let query: string;
     let params: any[];
+    let imageColumn = 'reference_image';
     switch (entityType) {
       case 'character':
         query = 'SELECT reference_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
@@ -178,33 +182,131 @@ router.get('/:id/image/:entityType/:entityId', async (req: AuthRequest, res: Res
         query = 'SELECT reference_image FROM character_variations WHERE id = ? AND project_id = ? AND user_id = ?';
         params = [entityId, projectId, userId];
         break;
+      case 'keyframe':
+        query = 'SELECT image_url FROM shot_keyframes WHERE id = ? AND project_id = ? AND user_id = ?';
+        params = [entityId, projectId, userId];
+        imageColumn = 'image_url';
+        break;
+      case 'turnaround':
+        query = 'SELECT turnaround_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
+        params = [entityId, projectId, userId];
+        imageColumn = 'turnaround_image';
+        break;
+      case 'ninegrid':
+        query = 'SELECT nine_grid_image FROM shots WHERE id = ? AND project_id = ? AND user_id = ?';
+        params = [entityId, projectId, userId];
+        imageColumn = 'nine_grid_image';
+        break;
       default:
         res.status(400).json({ error: '不支持的 entityType' });
         return;
     }
 
     const [rows] = await pool.execute<RowDataPacket[]>(query, params);
-    if (rows.length === 0 || !rows[0].reference_image) {
+    if (rows.length === 0 || !rows[0][imageColumn]) {
       res.status(404).json({ error: '图片不存在' });
       return;
     }
 
-    const base64 = rows[0].reference_image as string;
-    // 如果是 data URL，提取 MIME 和数据，直接返回二进制图片（更高效）
-    const match = base64.match(/^data:(image\/\w+);base64,(.+)$/);
+    let value = rows[0][imageColumn] as string;
+
+    // 处理可能的 JSON 脏数据 {"base64":"...","url":"..."}
+    if (value.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(value);
+        value = parsed.base64 || parsed.url || value;
+      } catch { /* ignore */ }
+    }
+
+    // 文件路径 → 从磁盘读取
+    if (isFilePath(value)) {
+      const fileData = readFileAsBuffer(value);
+      if (!fileData) {
+        res.status(404).json({ error: '图片文件不存在' });
+        return;
+      }
+      res.set('Content-Type', fileData.mime);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Content-Length', String(fileData.buffer.length));
+      res.send(fileData.buffer);
+      return;
+    }
+
+    // base64 data URI（旧数据兼容）→ 解码后返回二进制
+    const match = value.match(/^data:(image\/[\w+.-]+);base64,(.+)$/s);
     if (match) {
       const mimeType = match[1];
       const buffer = Buffer.from(match[2], 'base64');
       res.set('Content-Type', mimeType);
-      res.set('Cache-Control', 'public, max-age=86400'); // 缓存 24h
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Content-Length', String(buffer.length));
       res.send(buffer);
+    } else if (/^https?:\/\//i.test(value)) {
+      res.redirect(value);
     } else {
-      // 返回原始值（可能是非标准格式）
-      res.json({ referenceImage: base64 });
+      res.json({ referenceImage: value });
     }
   } catch (err: any) {
-    console.error('获取图片 fallback 失败:', err.message);
+    console.error('获取图片失败:', err.message);
     res.status(500).json({ error: '获取图片失败' });
+  }
+});
+
+/**
+ * GET /api/projects/:id/video/:videoId - 获取视频
+ *
+ * 支持两种存储方式：
+ * 1. 文件路径（data/xxx/...）→ 从磁盘读取文件
+ * 2. base64 data URI（旧数据兼容）→ 解码后返回二进制
+ */
+router.get('/:id/video/:videoId', async (req: AuthRequest, res: Response) => {
+  try {
+    const pool = getPool();
+    const { id: projectId, videoId } = req.params;
+    const userId = req.userId!;
+
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT video_url FROM shot_video_intervals WHERE id = ? AND project_id = ? AND user_id = ?',
+      [videoId, projectId, userId]
+    );
+    if (rows.length === 0 || !rows[0].video_url) {
+      res.status(404).json({ error: '视频不存在' });
+      return;
+    }
+
+    const videoData = rows[0].video_url as string;
+
+    // 文件路径 → 从磁盘读取
+    if (isFilePath(videoData)) {
+      const fileData = readFileAsBuffer(videoData);
+      if (!fileData) {
+        res.status(404).json({ error: '视频文件不存在' });
+        return;
+      }
+      res.set('Content-Type', fileData.mime);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Content-Length', String(fileData.buffer.length));
+      res.send(fileData.buffer);
+      return;
+    }
+
+    // base64 data URI（旧数据兼容）
+    const match = videoData.match(/^data:(video\/[\w+]+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1];
+      const buffer = Buffer.from(match[2], 'base64');
+      res.set('Content-Type', mimeType);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Content-Length', String(buffer.length));
+      res.send(buffer);
+    } else if (/^https?:\/\//i.test(videoData)) {
+      res.redirect(videoData);
+    } else {
+      res.status(404).json({ error: '视频格式不支持' });
+    }
+  } catch (err: any) {
+    console.error('获取视频失败:', err.message);
+    res.status(500).json({ error: '获取视频失败' });
   }
 });
 

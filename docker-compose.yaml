@@ -18,6 +18,7 @@ services:
       - DB_HOST=host.docker.internal
     volumes:
       - ./uploads:/app/uploads
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - cinegen-network

@@ -29,17 +29,23 @@ export const verifyToken = (token: string): JwtPayload => {
 
 /**
  * JWT 认证中间件
- * 从 Authorization header 中提取并验证 token
+ * 优先从 Authorization header 提取 token，
+ * 其次从 URL query 参数 ?token=xxx 提取（用于 <img src> / <video src> 等浏览器直接请求）
  */
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
+  let token: string | undefined;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
     res.status(401).json({ error: '未登录，请先登录' });
     return;
   }
-
-  const token = authHeader.substring(7);
 
   try {
     const decoded = verifyToken(token);

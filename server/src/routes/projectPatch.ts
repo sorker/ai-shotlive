@@ -10,9 +10,27 @@
 import { Router, Response } from 'express';
 import { getPool } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { resolveToFilePath } from '../services/fileStorage.js';
 
 const router = Router();
 router.use(authMiddleware);
+
+/**
+ * 预处理请求体中的图片字段：base64 → 保存为文件，返回文件路径
+ */
+function resolveBodyImages(
+  body: Record<string, any>,
+  projectId: string | string[],
+  entityType: string,
+  entityId: string | string[],
+  imageFields: string[] = ['referenceImage']
+): void {
+  for (const field of imageFields) {
+    if (body[field] !== undefined && body[field] !== null) {
+      body[field] = resolveToFilePath(projectId, entityType, entityId, body[field]);
+    }
+  }
+}
 
 // ============================================
 // Helper: 动态构建 UPDATE SET 子句
@@ -135,7 +153,10 @@ router.post('/:id/characters', async (req: AuthRequest, res: Response) => {
     const turnaroundData = ch.turnaround
       ? JSON.stringify({ panels: ch.turnaround.panels || [], prompt: ch.turnaround.prompt || '', status: ch.turnaround.status || 'pending' })
       : null;
-    const turnaroundImage = ch.turnaround?.imageUrl || null;
+    const turnaroundImage = resolveToFilePath(projectId, 'turnaround', ch.id, ch.turnaround?.imageUrl);
+
+    // base64 图片 → 保存为文件
+    const refImage = resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage);
 
     await pool.execute(
       `INSERT INTO script_characters
@@ -146,7 +167,7 @@ router.post('/:id/characters', async (req: AuthRequest, res: Response) => {
         ch.id, projectId, userId,
         ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
         ch.visualPrompt || '', ch.negativePrompt || null, ch.coreFeatures || null,
-        ch.referenceImage || null, ch.referenceImageUrl || null,
+        refImage, ch.referenceImageUrl || null,
         turnaroundData, turnaroundImage,
         ch.status || 'pending', sortOrder,
       ]
@@ -164,6 +185,8 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
   const userId = req.userId!;
 
   try {
+    // base64 图片 → 保存为文件
+    resolveBodyImages(req.body, projectId, 'character', charId);
     const { sets, values } = buildPatchSets(req.body, CHARACTER_FIELDS);
 
     // turnaround 特殊处理
@@ -175,7 +198,6 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
       } else {
         if (t.panels !== undefined || t.prompt !== undefined || t.status !== undefined) {
           sets.push('turnaround_data = ?');
-          // 需要 merge 现有数据
           const [existing] = await pool.execute<any[]>(
             'SELECT turnaround_data FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?',
             [charId, projectId, userId]
@@ -193,7 +215,7 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
         }
         if (t.imageUrl !== undefined) {
           sets.push('turnaround_image = ?');
-          values.push(t.imageUrl);
+          values.push(resolveToFilePath(projectId, 'turnaround', charId, t.imageUrl));
         }
       }
     }
@@ -263,6 +285,7 @@ router.post('/:id/characters/:charId/variations', async (req: AuthRequest, res: 
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
+    const refImage = resolveToFilePath(projectId, 'variation', v.id, v.referenceImage);
     await pool.execute(
       `INSERT INTO character_variations
        (id, character_id, project_id, user_id, name, visual_prompt, negative_prompt,
@@ -271,7 +294,7 @@ router.post('/:id/characters/:charId/variations', async (req: AuthRequest, res: 
       [
         v.id, charId, projectId, userId,
         v.name || '', v.visualPrompt || '', v.negativePrompt || null,
-        v.referenceImage || null, v.referenceImageUrl || null,
+        refImage, v.referenceImageUrl || null,
         v.status || 'pending', sortOrder,
       ]
     );
@@ -288,6 +311,7 @@ router.patch('/:id/characters/:charId/variations/:varId', async (req: AuthReques
   const userId = req.userId!;
 
   try {
+    resolveBodyImages(req.body, projectId, 'variation', varId);
     const { sets, values } = buildPatchSets(req.body, VARIATION_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -351,6 +375,7 @@ router.post('/:id/scenes', async (req: AuthRequest, res: Response) => {
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
+    const refImage = resolveToFilePath(projectId, 'scene', s.id, s.referenceImage);
     await pool.execute(
       `INSERT INTO script_scenes
        (id, project_id, user_id, location, time_period, atmosphere, visual_prompt, negative_prompt,
@@ -360,7 +385,7 @@ router.post('/:id/scenes', async (req: AuthRequest, res: Response) => {
         s.id, projectId, userId,
         s.location || '', s.time || s.timePeriod || '', s.atmosphere || '',
         s.visualPrompt || '', s.negativePrompt || null,
-        s.referenceImage || null, s.referenceImageUrl || null,
+        refImage, s.referenceImageUrl || null,
         s.status || 'pending', sortOrder,
       ]
     );
@@ -377,6 +402,7 @@ router.patch('/:id/scenes/:sceneId', async (req: AuthRequest, res: Response) => 
   const userId = req.userId!;
 
   try {
+    resolveBodyImages(req.body, projectId, 'scene', sceneId);
     const { sets, values } = buildPatchSets(req.body, SCENE_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -439,6 +465,7 @@ router.post('/:id/props', async (req: AuthRequest, res: Response) => {
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
+    const refImage = resolveToFilePath(projectId, 'prop', p.id, p.referenceImage);
     await pool.execute(
       `INSERT INTO script_props
        (id, project_id, user_id, name, category, description, visual_prompt, negative_prompt,
@@ -448,7 +475,7 @@ router.post('/:id/props', async (req: AuthRequest, res: Response) => {
         p.id, projectId, userId,
         p.name || '', p.category || '', p.description || '',
         p.visualPrompt || '', p.negativePrompt || null,
-        p.referenceImage || null, p.referenceImageUrl || null,
+        refImage, p.referenceImageUrl || null,
         p.status || 'pending', sortOrder,
       ]
     );
@@ -465,6 +492,7 @@ router.patch('/:id/props/:propId', async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   try {
+    resolveBodyImages(req.body, projectId, 'prop', propId);
     const { sets, values } = buildPatchSets(req.body, PROP_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -559,7 +587,8 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
           JSON.stringify(shot.props || []),
           shot.videoModel || null,
           ng?.panels ? JSON.stringify(ng.panels) : null,
-          ng?.imageUrl || null, ng?.prompt || null, ng?.status || null,
+          resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl) || null,
+          ng?.prompt || null, ng?.status || null,
           sortOrder,
         ]
       );
@@ -569,7 +598,8 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
         await conn.execute(
           `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '', kf.imageUrl || null, kf.status || 'pending']
+          [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '',
+           resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
         );
       }
 
@@ -585,7 +615,8 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
             iv.id, shot.id, projectId, userId,
             iv.startKeyframeId || '', iv.endKeyframeId || '',
             iv.duration || 0, iv.motionStrength || 5,
-            iv.videoUrl || null, iv.videoPrompt || null, iv.status || 'pending',
+            resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
+            iv.videoPrompt || null, iv.status || 'pending',
           ]
         );
       }
@@ -620,7 +651,7 @@ router.patch('/:id/shots/:shotId', async (req: AuthRequest, res: Response) => {
         values.push(null, null, null, null);
       } else {
         if (ng.panels !== undefined) { sets.push('nine_grid_panels = ?'); values.push(JSON.stringify(ng.panels)); }
-        if (ng.imageUrl !== undefined) { sets.push('nine_grid_image = ?'); values.push(ng.imageUrl); }
+        if (ng.imageUrl !== undefined) { sets.push('nine_grid_image = ?'); values.push(resolveToFilePath(projectId, 'ninegrid', shotId, ng.imageUrl)); }
         if (ng.prompt !== undefined) { sets.push('nine_grid_prompt = ?'); values.push(ng.prompt); }
         if (ng.status !== undefined) { sets.push('nine_grid_status = ?'); values.push(ng.status); }
       }
@@ -677,6 +708,7 @@ router.patch('/:id/shots/:shotId/keyframes/:kfId', async (req: AuthRequest, res:
   const userId = req.userId!;
 
   try {
+    resolveBodyImages(req.body, projectId, 'keyframe', kfId, ['imageUrl']);
     const { sets, values } = buildPatchSets(req.body, KEYFRAME_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -714,6 +746,7 @@ router.patch('/:id/shots/:shotId/videos/:videoId', async (req: AuthRequest, res:
   const userId = req.userId!;
 
   try {
+    resolveBodyImages(req.body, projectId, 'video', videoId, ['videoUrl']);
     const { sets, values } = buildPatchSets(req.body, VIDEO_INTERVAL_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -1118,8 +1151,10 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
           [
             ch.id, projectId, userId, ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
             ch.visualPrompt || '', ch.negativePrompt || null, ch.coreFeatures || null,
-            ch.referenceImage || null, ch.referenceImageUrl || null,
-            turnaroundMeta, ch.turnaround?.imageUrl || null,
+            resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage),
+            ch.referenceImageUrl || null,
+            turnaroundMeta,
+            resolveToFilePath(projectId, 'turnaround', ch.id, ch.turnaround?.imageUrl),
             ch.status || 'pending', i,
           ]
         );
@@ -1133,7 +1168,8 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
               reference_image, reference_image_url, status, sort_order)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [v.id, ch.id, projectId, userId, v.name || '', v.visualPrompt || '', v.negativePrompt || null,
-             v.referenceImage || null, v.referenceImageUrl || null, v.status || 'pending', j]
+             resolveToFilePath(projectId, 'variation', v.id, v.referenceImage),
+             v.referenceImageUrl || null, v.status || 'pending', j]
           );
         }
       }
@@ -1148,7 +1184,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
             reference_image, reference_image_url, status, sort_order)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [s.id, projectId, userId, s.location || '', s.time || '', s.atmosphere || '',
-           s.visualPrompt || '', s.negativePrompt || null, s.referenceImage || null, s.referenceImageUrl || null,
+           s.visualPrompt || '', s.negativePrompt || null,
+           resolveToFilePath(projectId, 'scene', s.id, s.referenceImage),
+           s.referenceImageUrl || null,
            s.status || 'pending', i]
         );
       }
@@ -1163,7 +1201,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
             reference_image, reference_image_url, status, sort_order)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [p.id, projectId, userId, p.name || '', p.category || '', p.description || '',
-           p.visualPrompt || '', p.negativePrompt || null, p.referenceImage || null, p.referenceImageUrl || null,
+           p.visualPrompt || '', p.negativePrompt || null,
+           resolveToFilePath(projectId, 'prop', p.id, p.referenceImage),
+           p.referenceImageUrl || null,
            p.status || 'pending', i]
         );
       }
@@ -1194,7 +1234,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
             shot.cameraMovement || '', shot.shotSize || null,
             JSON.stringify(shot.characters || []), JSON.stringify(shot.characterVariations || {}),
             JSON.stringify(shot.props || []), shot.videoModel || null,
-            ng?.panels ? JSON.stringify(ng.panels) : null, ng?.imageUrl || null, ng?.prompt || null, ng?.status || null,
+            ng?.panels ? JSON.stringify(ng.panels) : null,
+            resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl) || null,
+            ng?.prompt || null, ng?.status || null,
             i,
           ]
         );
@@ -1203,7 +1245,8 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
           await conn.execute(
             `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '', kf.imageUrl || null, kf.status || 'pending']
+            [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '',
+             resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
           );
         }
 
@@ -1215,7 +1258,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
               duration, motion_strength, video_url, video_prompt, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [iv.id, shot.id, projectId, userId, iv.startKeyframeId || '', iv.endKeyframeId || '',
-             iv.duration || 0, iv.motionStrength || 5, iv.videoUrl || null, iv.videoPrompt || null, iv.status || 'pending']
+             iv.duration || 0, iv.motionStrength || 5,
+             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
+             iv.videoPrompt || null, iv.status || 'pending']
           );
         }
       }
@@ -1296,7 +1341,9 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
             shot.cameraMovement || '', shot.shotSize || null,
             JSON.stringify(shot.characters || []), JSON.stringify(shot.characterVariations || {}),
             JSON.stringify(shot.props || []), shot.videoModel || null,
-            ng?.panels ? JSON.stringify(ng.panels) : null, ng?.imageUrl || null, ng?.prompt || null, ng?.status || null,
+            ng?.panels ? JSON.stringify(ng.panels) : null,
+            resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl) || null,
+            ng?.prompt || null, ng?.status || null,
             origSortOrder + i,
           ]
         );
@@ -1305,7 +1352,8 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
           await conn.execute(
             `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '', kf.imageUrl || null, kf.status || 'pending']
+            [kf.id, shot.id, projectId, userId, kf.type || 'start', kf.visualPrompt || '',
+             resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
           );
         }
 
@@ -1317,7 +1365,9 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
               duration, motion_strength, video_url, video_prompt, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [iv.id, shot.id, projectId, userId, iv.startKeyframeId || '', iv.endKeyframeId || '',
-             iv.duration || 0, iv.motionStrength || 5, iv.videoUrl || null, iv.videoPrompt || null, iv.status || 'pending']
+             iv.duration || 0, iv.motionStrength || 5,
+             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
+             iv.videoPrompt || null, iv.status || 'pending']
           );
         }
       }

@@ -21,6 +21,9 @@ server/dist
 # Uploads directory
 uploads/
 
+# Media data files (images/videos extracted from base64)
+data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

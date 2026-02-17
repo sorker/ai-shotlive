@@ -10,6 +10,7 @@
  */
 
 import { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { resolveToFilePath, isFilePath, readFileAsBuffer, isBase64DataUri } from './fileStorage.js';
 
 /**
  * 安全清洗图片字段：处理 DB 中可能存在的脏数据
@@ -22,16 +23,29 @@ import { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
  * - 正常 base64 / URL → 原样返回
  * - null/undefined → undefined
  */
-const sanitizeImageField = (value: string | null | undefined): { display: string | undefined; url: string | undefined } => {
+/**
+ * @param value       数据库中的图片值（可能是 URL、base64、JSON 脏数据）
+ * @param fallbackUrl 当值为 base64 时使用的服务端回退 URL（避免传输大体积 base64）
+ */
+const sanitizeImageField = (
+  value: string | null | undefined,
+  fallbackUrl?: string
+): { display: string | undefined; url: string | undefined } => {
   if (!value) return { display: undefined, url: undefined };
+
+  // 文件路径（data/...）→ 使用服务端 API URL 提供访问
+  if (isFilePath(value) && fallbackUrl) {
+    return { display: fallbackUrl, url: fallbackUrl };
+  }
 
   // 检测 JSON 格式的脏数据：{"base64":"...","url":"..."}
   if (value.startsWith('{')) {
     try {
       const parsed = JSON.parse(value);
       const url = parsed.url || undefined;
-      const base64 = parsed.base64 || undefined;
-      return { display: url || base64, url };
+      if (url) return { display: url, url };
+      if (fallbackUrl) return { display: fallbackUrl, url: fallbackUrl };
+      return { display: parsed.base64 || undefined, url: undefined };
     } catch {
       // 非合法 JSON，当普通字符串处理
     }
@@ -42,7 +56,17 @@ const sanitizeImageField = (value: string | null | undefined): { display: string
     return { display: value, url: value };
   }
 
-  // 正常 base64
+  // 已经是 API 回退 URL（/api/...）
+  if (value.startsWith('/api/')) {
+    return { display: value, url: value };
+  }
+
+  // base64 数据 —— 使用 fallbackUrl 代替，避免传输大数据
+  if (fallbackUrl) {
+    return { display: fallbackUrl, url: fallbackUrl };
+  }
+
+  // 最终回退（不应到达）
   return { display: value, url: undefined };
 };
 
@@ -71,10 +95,10 @@ interface ProjectState {
 // ─── SAVE：将 ProjectState 拆解存入各表 ──────────────────────────
 
 /**
- * 在事务外预读 base64 备份数据。
+ * 在事务外预读图片备份数据（文件路径或 URL）。
  * 这些 SELECT 不需要事务保护，提前执行可以缩短事务持锁时间。
  */
-export interface Base64Backup {
+export interface ImageBackup {
   charImg: Map<string, string | null>;
   varImg: Map<string, string | null>;
   sceneImg: Map<string, string | null>;
@@ -82,20 +106,11 @@ export interface Base64Backup {
   kfImg: Map<string, string | null>;
 }
 
-const extractBase64FromBackup = (val: string | null): string | null => {
-  if (!val) return null;
-  if (val.startsWith('data:')) return val;
-  if (val.startsWith('{')) {
-    try { const p = JSON.parse(val); return p.base64 || null; } catch { return null; }
-  }
-  return val;
-};
-
-export async function fetchBase64Backup(
+export async function fetchImageBackup(
   pool: Pool,
   userId: number,
   projectId: string
-): Promise<Base64Backup> {
+): Promise<ImageBackup> {
   const [
     [prevChars],
     [prevVars],
@@ -121,11 +136,11 @@ export async function fetchBase64Backup(
   ]);
 
   return {
-    charImg: new Map(prevChars.map(r => [r.id, extractBase64FromBackup(r.reference_image)])),
-    varImg: new Map(prevVars.map(r => [`${r.character_id}:${r.id}`, extractBase64FromBackup(r.reference_image)])),
-    sceneImg: new Map(prevScenes.map(r => [r.id, extractBase64FromBackup(r.reference_image)])),
-    propImg: new Map(prevProps.map(r => [r.id, extractBase64FromBackup(r.reference_image)])),
-    kfImg: new Map(prevKeyframes.map(r => [`${r.shot_id}:${r.id}`, extractBase64FromBackup(r.image_url)])),
+    charImg: new Map(prevChars.map(r => [r.id, r.reference_image || null])),
+    varImg: new Map(prevVars.map(r => [`${r.character_id}:${r.id}`, r.reference_image || null])),
+    sceneImg: new Map(prevScenes.map(r => [r.id, r.reference_image || null])),
+    propImg: new Map(prevProps.map(r => [r.id, r.reference_image || null])),
+    kfImg: new Map(prevKeyframes.map(r => [`${r.shot_id}:${r.id}`, r.image_url || null])),
   };
 }
 
@@ -133,7 +148,7 @@ export async function saveProjectNormalized(
   conn: PoolConnection,
   userId: number,
   project: ProjectState,
-  backup?: Base64Backup
+  backup?: ImageBackup
 ): Promise<void> {
   const pid = project.id;
 
@@ -189,7 +204,7 @@ export async function saveProjectNormalized(
     ]
   );
 
-  // ②a 使用预读的 base64 备份（如果没有传入则在事务内读取作为 fallback）
+  // ②a 使用预读的图片备份（如果没有传入则在事务内读取作为 fallback）
   let prevCharImg: Map<string, string | null>;
   let prevVarImg: Map<string, string | null>;
   let prevSceneImg: Map<string, string | null>;
@@ -220,11 +235,11 @@ export async function saveProjectNormalized(
       'SELECT id, shot_id, image_url FROM shot_keyframes WHERE project_id = ? AND user_id = ?', [pid, userId]
     );
 
-    prevCharImg = new Map(prevChars.map(r => [r.id, extractBase64FromBackup(r.reference_image)]));
-    prevVarImg = new Map(prevVars.map(r => [`${r.character_id}:${r.id}`, extractBase64FromBackup(r.reference_image)]));
-    prevSceneImg = new Map(prevScenes.map(r => [r.id, extractBase64FromBackup(r.reference_image)]));
-    prevPropImg = new Map(prevProps.map(r => [r.id, extractBase64FromBackup(r.reference_image)]));
-    prevKfImg = new Map(prevKeyframes.map(r => [`${r.shot_id}:${r.id}`, extractBase64FromBackup(r.image_url)]));
+    prevCharImg = new Map(prevChars.map(r => [r.id, r.reference_image || null]));
+    prevVarImg = new Map(prevVars.map(r => [`${r.character_id}:${r.id}`, r.reference_image || null]));
+    prevSceneImg = new Map(prevScenes.map(r => [r.id, r.reference_image || null]));
+    prevPropImg = new Map(prevProps.map(r => [r.id, r.reference_image || null]));
+    prevKfImg = new Map(prevKeyframes.map(r => [`${r.shot_id}:${r.id}`, r.image_url || null]));
   }
 
   // ② 清空旧的子表数据（事务内，失败会回滚）
@@ -265,11 +280,33 @@ export async function saveProjectNormalized(
     );
   }
 
-  // 辅助：判断 referenceImage 是否为 base64（不是 URL）
-  // 前端只持有 URL，如果 referenceImage 是 URL/空值，则用 DB 缓存的 base64
-  const resolveBase64 = (frontendVal: string | undefined | null, cachedBase64: string | undefined | null): string | null => {
-    if (frontendVal && frontendVal.startsWith('data:')) return frontendVal; // 是 base64，直接用
-    return cachedBase64 || null; // 非 base64（URL/null），保留 DB 中原有 base64
+  // 辅助：解析图片/视频值，base64 保存为文件，返回文件路径或 URL
+  // - 前端发来 base64 → 保存为文件，返回文件路径
+  // - 前端发来 URL → 原样返回
+  // - 前端发来 null/空 → 使用 DB 中原有值（可能是文件路径或 URL）
+  const resolveImageValue = (
+    frontendVal: string | undefined | null,
+    cachedVal: string | undefined | null,
+    entityType: string,
+    entityId: string,
+  ): string | null => {
+    // 前端传了 base64，保存为文件
+    if (frontendVal && isBase64DataUri(frontendVal)) {
+      return resolveToFilePath(pid, entityType, entityId, frontendVal);
+    }
+    // 前端传了有效值（URL 或文件路径），直接用
+    if (frontendVal && (frontendVal.startsWith('http') || isFilePath(frontendVal))) {
+      return frontendVal;
+    }
+    // 前端无值，使用 DB 缓存值
+    if (cachedVal) {
+      // 如果缓存值是 base64（旧数据），趁机迁移为文件
+      if (isBase64DataUri(cachedVal)) {
+        return resolveToFilePath(pid, entityType, entityId, cachedVal);
+      }
+      return cachedVal;
+    }
+    return null;
   };
 
   // ⑤ 写入角色 + 角色变体
@@ -290,10 +327,10 @@ export async function saveProjectNormalized(
         ch.id, pid, userId, ch.name || '', ch.gender || '', ch.age || '',
         ch.personality || '',
         ch.visualPrompt || null, ch.negativePrompt || null, ch.coreFeatures || null,
-        resolveBase64(ch.referenceImage, prevCharImg.get(ch.id)),
+        resolveImageValue(ch.referenceImage, prevCharImg.get(ch.id), 'character', ch.id),
         ch.referenceImageUrl || null,
         turnaroundMeta ? JSON.stringify(turnaroundMeta) : null,
-        ch.turnaround?.imageUrl || null,
+        resolveToFilePath(pid, 'turnaround', ch.id, ch.turnaround?.imageUrl) || null,
         ch.status || null,
         i,
       ]
@@ -307,7 +344,7 @@ export async function saveProjectNormalized(
          (id, character_id, project_id, user_id, name, visual_prompt, negative_prompt, reference_image, reference_image_url, status, sort_order)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [v.id, ch.id, pid, userId, v.name || '', v.visualPrompt || null, v.negativePrompt || null,
-         resolveBase64(v.referenceImage, prevVarImg.get(`${ch.id}:${v.id}`)),
+         resolveImageValue(v.referenceImage, prevVarImg.get(`${ch.id}:${v.id}`), 'variation', v.id),
          v.referenceImageUrl || null, v.status || null, j]
       );
     }
@@ -324,7 +361,7 @@ export async function saveProjectNormalized(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [s.id, pid, userId, s.location || '', s.time || '', s.atmosphere || '',
        s.visualPrompt || null, s.negativePrompt || null,
-       resolveBase64(s.referenceImage, prevSceneImg.get(s.id)),
+       resolveImageValue(s.referenceImage, prevSceneImg.get(s.id), 'scene', s.id),
        s.referenceImageUrl || null, s.status || null, i]
     );
   }
@@ -339,7 +376,7 @@ export async function saveProjectNormalized(
         visual_prompt, negative_prompt, reference_image, reference_image_url, status, sort_order)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [p.id, pid, userId, p.name || '', p.category || '', p.description || '', p.visualPrompt || null, p.negativePrompt || null,
-       resolveBase64(p.referenceImage, prevPropImg.get(p.id)),
+       resolveImageValue(p.referenceImage, prevPropImg.get(p.id), 'prop', p.id),
        p.referenceImageUrl || null, p.status || null, i]
     );
   }
@@ -376,16 +413,16 @@ export async function saveProjectNormalized(
         JSON.stringify(shot.props || []),
         shot.videoModel || null,
         ng?.panels ? JSON.stringify(ng.panels) : null,
-        ng?.imageUrl || null,
+        resolveToFilePath(pid, 'ninegrid', shot.id, ng?.imageUrl) || null,
         ng?.prompt || null,
         ng?.status || null,
         i,
       ]
     );
 
-    // 关键帧（保护 base64 不被 URL 覆盖）
+    // 关键帧
     for (const kf of shot.keyframes || []) {
-      const kfImgVal = resolveBase64(kf.imageUrl, prevKfImg.get(`${shot.id}:${kf.id}`));
+      const kfImgVal = resolveImageValue(kf.imageUrl, prevKfImg.get(`${shot.id}:${kf.id}`), 'keyframe', kf.id);
       await conn.execute(
         `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, type, visual_prompt, image_url, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -396,6 +433,7 @@ export async function saveProjectNormalized(
     // 视频片段
     if (shot.interval) {
       const iv = shot.interval;
+      const videoVal = resolveToFilePath(pid, 'video', iv.id, iv.videoUrl);
       await conn.execute(
         `INSERT INTO shot_video_intervals
          (id, shot_id, project_id, user_id, start_keyframe_id, end_keyframe_id,
@@ -405,7 +443,7 @@ export async function saveProjectNormalized(
           iv.id, shot.id, pid, userId,
           iv.startKeyframeId || '', iv.endKeyframeId || '',
           iv.duration || 0, iv.motionStrength || 5,
-          iv.videoUrl || null, iv.videoPrompt || null, iv.status || 'pending',
+          videoVal, iv.videoPrompt || null, iv.status || 'pending',
         ]
       );
     }
@@ -565,14 +603,17 @@ export async function loadProjectNormalized(
       }
   );
 
+  // 构建图片回退 URL 前缀（用于将 base64 替换为服务端 API URL）
+  const imgBase = `/api/projects/${projectId}/image`;
+
   // ── 组装角色变体（按角色分组）──
-  // 优化：有 URL 时只发 URL 给前端（体积小），base64 留在 DB 供服务端 API 使用
+  // 优化：有 URL 时只发 URL 给前端，base64 替换为服务端回退 URL
   const variationsByChar = new Map<string, any[]>();
   for (const v of variationRows) {
     const cid = v.character_id;
     if (!variationsByChar.has(cid)) variationsByChar.set(cid, []);
-    // sanitize：处理 DB 中可能存在的 JSON 脏数据
-    const imgSafe = sanitizeImageField(v.reference_image_url || v.reference_image);
+    const fallback = (v.reference_image || v.reference_image_url) ? `${imgBase}/variation/${v.id}` : undefined;
+    const imgSafe = sanitizeImageField(v.reference_image_url || v.reference_image, fallback);
     variationsByChar.get(cid)!.push({
       id: v.id,
       name: v.name || '',
@@ -587,11 +628,16 @@ export async function loadProjectNormalized(
   // ── 组装角色 ──
   const characters = charRows.map(r => {
     const turnaroundMeta = safeJsonParse(r.turnaround_data, null);
+    let turnaroundImageUrl = r.turnaround_image || undefined;
+    if (turnaroundImageUrl && (isBase64DataUri(turnaroundImageUrl) || isFilePath(turnaroundImageUrl))) {
+      turnaroundImageUrl = `${imgBase}/turnaround/${r.id}`;
+    }
     const turnaround = turnaroundMeta
-      ? { ...turnaroundMeta, imageUrl: r.turnaround_image || undefined }
+      ? { ...turnaroundMeta, imageUrl: turnaroundImageUrl }
       : undefined;
 
-    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image);
+    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/character/${r.id}` : undefined;
+    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image, fallback);
     return {
       id: r.id,
       name: r.name || '',
@@ -611,7 +657,8 @@ export async function loadProjectNormalized(
 
   // ── 组装场景 ──
   const scenes = sceneRows.map(r => {
-    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image);
+    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/scene/${r.id}` : undefined;
+    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image, fallback);
     return {
       id: r.id,
       location: r.location || '',
@@ -627,7 +674,8 @@ export async function loadProjectNormalized(
 
   // ── 组装道具 ──
   const props = propRows.map(r => {
-    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image);
+    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/prop/${r.id}` : undefined;
+    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image, fallback);
     return {
       id: r.id,
       name: r.name || '',
@@ -653,8 +701,9 @@ export async function loadProjectNormalized(
   for (const kf of keyframeRows) {
     const sid = kf.shot_id;
     if (!keyframesByShot.has(sid)) keyframesByShot.set(sid, []);
-    // sanitize：关键帧 image_url 可能存有 JSON 脏数据 {"base64":"...","url":"..."}
-    const kfImgSafe = sanitizeImageField(kf.image_url);
+    // 关键帧图片：base64 替换为服务端回退 URL，避免传输大数据
+    const fallback = kf.image_url ? `${imgBase}/keyframe/${kf.id}` : undefined;
+    const kfImgSafe = sanitizeImageField(kf.image_url, fallback);
     keyframesByShot.get(sid)!.push({
       id: kf.id,
       type: kf.type || 'start',
@@ -667,13 +716,18 @@ export async function loadProjectNormalized(
   // ── 组装视频片段（按镜头分组）──
   const intervalsByShot = new Map<string, any>();
   for (const iv of intervalRows) {
+    // 视频：文件路径或 base64 都替换为服务端 API URL
+    let videoUrl = iv.video_url || undefined;
+    if (videoUrl && (videoUrl.startsWith('data:') || isFilePath(videoUrl))) {
+      videoUrl = `/api/projects/${projectId}/video/${iv.id}`;
+    }
     intervalsByShot.set(iv.shot_id, {
       id: iv.id,
       startKeyframeId: iv.start_keyframe_id || '',
       endKeyframeId: iv.end_keyframe_id || '',
       duration: iv.duration || 0,
       motionStrength: iv.motion_strength || 5,
-      videoUrl: iv.video_url || undefined,
+      videoUrl,
       videoPrompt: iv.video_prompt || undefined,
       status: iv.status || 'pending',
     });
@@ -682,10 +736,15 @@ export async function loadProjectNormalized(
   // ── 组装镜头 ──
   const shots = shotRows.map(r => {
     const ngPanels = safeJsonParse(r.nine_grid_panels, null);
+    let ngImageUrl = r.nine_grid_image || undefined;
+    // 九宫格图片：文件路径或 base64 → API URL
+    if (ngImageUrl && (isBase64DataUri(ngImageUrl) || isFilePath(ngImageUrl))) {
+      ngImageUrl = `${imgBase}/ninegrid/${r.id}`;
+    }
     const nineGrid = ngPanels
       ? {
           panels: ngPanels,
-          imageUrl: r.nine_grid_image || undefined,
+          imageUrl: ngImageUrl,
           prompt: r.nine_grid_prompt || undefined,
           status: r.nine_grid_status || 'pending',
         }

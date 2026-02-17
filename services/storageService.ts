@@ -1,5 +1,5 @@
 import { ProjectState, AssetLibraryItem, NovelChapter, NovelEpisode } from '../types';
-import { apiGet, apiPut, apiDelete, apiPost } from './apiClient';
+import { apiGet, apiPut, apiDelete, apiPost, getToken } from './apiClient';
 
 /**
  * 清洗图片字段：如果是 JSON 脏数据 {"base64":"...","url":"..."}，提取出有效值
@@ -16,26 +16,42 @@ const sanitizeImg = (val: string | undefined): string | undefined => {
 };
 
 /**
- * 遍历项目数据，清洗所有图片字段中可能存在的 JSON 脏数据
+ * 给服务端 API 回退 URL 追加 JWT token，使 <img src> / <video src> 能通过认证
+ */
+const appendAuthToken = (url: string | undefined): string | undefined => {
+  if (!url || !url.startsWith('/api/')) return url;
+  const token = getToken();
+  if (!token) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${token}`;
+};
+
+/**
+ * 遍历项目数据，清洗所有图片/视频字段
+ * - 清理 JSON 脏数据
+ * - 给服务端 API URL 追加认证 token
  */
 const sanitizeProjectImages = (project: ProjectState): void => {
   if (project.scriptData) {
     for (const ch of project.scriptData.characters || []) {
-      ch.referenceImage = sanitizeImg(ch.referenceImage);
+      ch.referenceImage = appendAuthToken(sanitizeImg(ch.referenceImage));
       for (const v of ch.variations || []) {
-        v.referenceImage = sanitizeImg(v.referenceImage);
+        v.referenceImage = appendAuthToken(sanitizeImg(v.referenceImage));
       }
     }
     for (const s of project.scriptData.scenes || []) {
-      s.referenceImage = sanitizeImg(s.referenceImage);
+      s.referenceImage = appendAuthToken(sanitizeImg(s.referenceImage));
     }
     for (const p of project.scriptData.props || []) {
-      p.referenceImage = sanitizeImg(p.referenceImage);
+      p.referenceImage = appendAuthToken(sanitizeImg(p.referenceImage));
     }
   }
   for (const shot of project.shots || []) {
     for (const kf of shot.keyframes || []) {
-      kf.imageUrl = sanitizeImg(kf.imageUrl);
+      kf.imageUrl = appendAuthToken(sanitizeImg(kf.imageUrl));
+    }
+    if (shot.interval?.videoUrl) {
+      shot.interval.videoUrl = appendAuthToken(shot.interval.videoUrl);
     }
   }
 };

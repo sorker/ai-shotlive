@@ -5,7 +5,7 @@ import { fetchChaptersPaginated, fetchChapterContent } from '../../services/stor
 import { Upload, BookOpen, Trash2, ChevronDown, ChevronRight, FileText, AlertCircle, CheckCircle2, X, ChevronLeft, Loader2 } from 'lucide-react';
 import * as PS from '../../services/projectPatchService';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 interface Props {
   project: ProjectState;
@@ -307,7 +307,7 @@ const NovelManager: React.FC<Props> = ({ project, updateProject }) => {
                     {reelName}
                   </div>
                 )}
-                {reelChapters.map((chapter) => {
+                {Array.isArray(reelChapters) && reelChapters.map((chapter) => {
                   const isExpanded = expandedChapterId === chapter.id;
                   const isEditing = editingChapterId === chapter.id;
                   const wordCount = chapter.wordCount || chapter.content?.length || 0;

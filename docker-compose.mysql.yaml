@@ -18,6 +18,7 @@ services:
       - DB_PORT=3306
     volumes:
       - ./uploads:/app/uploads
+      - ./data:/app/data
     restart: unless-stopped
     depends_on:
       mysql:
