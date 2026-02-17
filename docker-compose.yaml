@@ -1,5 +1,5 @@
 # 使用宿主机 MySQL，数据库连接参数从 .env 读取
-# 容器内通过 host.docker.internal 访问宿主机（Mac/Windows 原生支持；Linux 需 Docker 20.10+）
+# 容器内通过 host.docker.internal 访问宿主机（Mac/Windows 原生支持；Linux 需 extra_hosts 映射）
 # 生产环境仅 Node 一个进程，前后端与 /api/proxy 均由 Node 提供，对外暴露 80 端口
 # 使用 MySQL 容器请用: docker compose -f docker-compose.mysql.yaml up -d --build
 
@@ -16,6 +16,8 @@ services:
     environment:
       - NODE_ENV=production
       - DB_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./uploads:/app/uploads
       - ./data:/app/data

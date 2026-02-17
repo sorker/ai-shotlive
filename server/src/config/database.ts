@@ -159,34 +159,75 @@ const migrateExistingEpisodeIds = async (conn: mysql.PoolConnection): Promise<vo
 
 /**
  * 修改主键：将 episode_id 纳入主键，支持不同剧本中存在相同实体 ID
+ *
+ * MariaDB/MySQL InnoDB 最大主键长度 = 3072 bytes（16KB 页）。
+ * utf8mb4 下 VARCHAR(255) = 1020 bytes，4 个 VARCHAR(255) + INT 就会超限。
+ * 对于包含 4+ VARCHAR 列的主键，先将 ID 列缩短为 VARCHAR(100)（UUID 仅 36 字符）。
  */
 const migrateEpisodeIdIntoPrimaryKeys = async (conn: mysql.PoolConnection): Promise<void> => {
-  const pkMigrations: { table: string; newPk: string }[] = [
+  const pkMigrations: { table: string; newPk: string; shrinkCols?: { name: string; def: string }[] }[] = [
     { table: 'script_characters', newPk: '(id, project_id, user_id, episode_id)' },
-    { table: 'character_variations', newPk: '(id, character_id, project_id, user_id, episode_id)' },
+    {
+      table: 'character_variations',
+      newPk: '(id, character_id, project_id, user_id, episode_id)',
+      shrinkCols: [
+        { name: 'id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'character_id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'project_id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'episode_id', def: "VARCHAR(100) NOT NULL DEFAULT ''" },
+      ]
+    },
     { table: 'script_scenes', newPk: '(id, project_id, user_id, episode_id)' },
     { table: 'script_props', newPk: '(id, project_id, user_id, episode_id)' },
     { table: 'story_paragraphs', newPk: '(paragraph_id, project_id, user_id, episode_id)' },
     { table: 'shots', newPk: '(id, project_id, user_id, episode_id)' },
-    { table: 'shot_keyframes', newPk: '(id, shot_id, project_id, user_id, episode_id)' },
-    { table: 'shot_video_intervals', newPk: '(id, shot_id, project_id, user_id, episode_id)' },
+    {
+      table: 'shot_keyframes',
+      newPk: '(id, shot_id, project_id, user_id, episode_id)',
+      shrinkCols: [
+        { name: 'id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'shot_id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'project_id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'episode_id', def: "VARCHAR(100) NOT NULL DEFAULT ''" },
+      ]
+    },
+    {
+      table: 'shot_video_intervals',
+      newPk: '(id, shot_id, project_id, user_id, episode_id)',
+      shrinkCols: [
+        { name: 'id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'shot_id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'project_id', def: 'VARCHAR(100) NOT NULL' },
+        { name: 'episode_id', def: "VARCHAR(100) NOT NULL DEFAULT ''" },
+      ]
+    },
     { table: 'render_logs', newPk: '(id, project_id, user_id, episode_id)' },
   ];
 
-  for (const { table, newPk } of pkMigrations) {
+  for (const { table, newPk, shrinkCols } of pkMigrations) {
     try {
-      // 检查 episode_id 是否已在主键中
       const [pkCols] = await conn.execute<RowDataPacket[]>(
         `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'episode_id'`,
         [table]
       );
       if (pkCols.length === 0) {
+        if (shrinkCols) {
+          await conn.execute('SET FOREIGN_KEY_CHECKS = 0');
+          try {
+            for (const { name, def } of shrinkCols) {
+              await conn.execute(`ALTER TABLE \`${table}\` MODIFY COLUMN \`${name}\` ${def}`);
+            }
+          } finally {
+            await conn.execute('SET FOREIGN_KEY_CHECKS = 1');
+          }
+        }
         await conn.execute(`ALTER TABLE \`${table}\` DROP PRIMARY KEY, ADD PRIMARY KEY ${newPk}`);
         console.log(`  🔑 已更新 ${table} 主键，纳入 episode_id`);
       }
     } catch (err: any) {
       console.warn(`  ⚠️ 更新 ${table} 主键失败: ${err.message}`);
+      try { await conn.execute('SET FOREIGN_KEY_CHECKS = 1'); } catch {}
     }
   }
 };
