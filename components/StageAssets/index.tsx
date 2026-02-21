@@ -1173,7 +1173,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     new Set(
       libraryItems.map((item) => (item.projectName && item.projectName.trim()) || '未知项目')
     )
-  ).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  ).sort((a, b) => (a as string).localeCompare(b as string, 'zh-CN'));
   const filteredLibraryItems = libraryItems.filter((item) => {
     if (libraryFilter !== 'all' && item.type !== libraryFilter) return false;
     if (libraryProjectFilter !== 'all') {
