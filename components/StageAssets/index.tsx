@@ -22,7 +22,6 @@ import TurnaroundModal from './TurnaroundModal';
 import { useAlert } from '../GlobalAlert';
 import { getAllAssetLibraryItems, saveAssetToLibrary, deleteAssetFromLibrary } from '../../services/storageService';
 import { applyLibraryItemToProject, createLibraryItemFromCharacter, createLibraryItemFromScene, createLibraryItemFromProp, cloneCharacterForProject } from '../../services/assetLibraryService';
-import * as PS from '../../services/projectPatchService';
 import { AspectRatioSelector } from '../AspectRatioSelector';
 import { getUserAspectRatio, setUserAspectRatio, getActiveImageModel } from '../../services/modelRegistry';
 
@@ -369,7 +368,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
         }
         return { ...prev, scriptData: newData };
       });
-      PS.patchCharacter(project.id, charId, { referenceImage: base64 });
     } catch (e: any) {
       showAlert(e.message, { type: 'error' });
     }
@@ -392,7 +390,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
         }
         return { ...prev, scriptData: newData };
       });
-      PS.patchScene(project.id, sceneId, { referenceImage: base64 });
     } catch (e: any) {
       showAlert(e.message, { type: 'error' });
     }
@@ -456,17 +453,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     try {
       const updated = applyLibraryItemToProject(project, item);
       updateProject(() => updated);
-      if (item.type === 'character') {
-        const newChar = updated.scriptData!.characters[updated.scriptData!.characters.length - 1];
-        PS.addCharacter(project.id, newChar);
-      } else if (item.type === 'scene') {
-        const newScene = updated.scriptData!.scenes[updated.scriptData!.scenes.length - 1];
-        PS.addScene(project.id, newScene);
-      } else if (item.type === 'prop') {
-        const props = updated.scriptData!.props || [];
-        const newProp = props[props.length - 1];
-        PS.addProp(project.id, newProp);
-      }
       showAlert(`已导入：${item.name}`, { type: 'success' });
     } catch (e: any) {
       showAlert(e?.message || '导入失败', { type: 'error' });
@@ -487,8 +473,10 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     const cloned = cloneCharacterForProject(item.data as Character);
     const previous = newData.characters[index];
 
-    const replacement = { ...cloned, id: previous.id };
-    newData.characters[index] = replacement;
+    newData.characters[index] = {
+      ...cloned,
+      id: previous.id
+    };
 
     const nextShots = project.shots.map((shot) => {
       if (!shot.characterVariations || !shot.characterVariations[targetId]) return shot;
@@ -500,8 +488,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     });
 
     updateProject({ scriptData: newData, shots: nextShots });
-    const { id: _id, ...updates } = replacement;
-    PS.patchCharacter(project.id, previous.id, updates);
     showAlert(`已替换角色：${previous.name} → ${cloned.name}`, { type: 'success' });
     setShowLibraryModal(false);
     setReplaceTargetCharId(null);
@@ -526,7 +512,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     if (char) {
       char.visualPrompt = newPrompt;
       updateProject({ scriptData: newData });
-      PS.patchCharacter(project.id, charId, { visualPrompt: newPrompt });
     }
   };
 
@@ -543,7 +528,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       if (updates.age !== undefined) char.age = updates.age;
       if (updates.personality !== undefined) char.personality = updates.personality;
       updateProject({ scriptData: newData });
-      PS.patchCharacter(project.id, charId, updates);
     }
   };
 
@@ -557,7 +541,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     if (scene) {
       scene.visualPrompt = newPrompt;
       updateProject({ scriptData: newData });
-      PS.patchScene(project.id, sceneId, { visualPrompt: newPrompt });
     }
   };
 
@@ -573,7 +556,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       if (updates.time !== undefined) scene.time = updates.time;
       if (updates.atmosphere !== undefined) scene.atmosphere = updates.atmosphere;
       updateProject({ scriptData: newData });
-      PS.patchScene(project.id, sceneId, updates);
     }
   };
 
@@ -597,7 +579,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     const newData = { ...project.scriptData };
     newData.characters.push(newChar);
     updateProject({ scriptData: newData });
-    PS.addCharacter(project.id, newChar);
     showAlert('新角色已创建，请编辑提示词并生成图片', { type: 'success' });
   };
 
@@ -621,7 +602,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
           const newData = { ...project.scriptData! };
           newData.characters = newData.characters.filter(c => !compareIds(c.id, charId));
           updateProject({ scriptData: newData });
-          PS.removeCharacter(project.id, charId);
           showAlert(`角色 "${char.name}" 已删除`, { type: 'success' });
         }
       }
@@ -646,7 +626,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     const newData = { ...project.scriptData };
     newData.scenes.push(newScene);
     updateProject({ scriptData: newData });
-    PS.addScene(project.id, newScene);
     showAlert('新场景已创建，请编辑提示词并生成图片', { type: 'success' });
   };
 
@@ -670,7 +649,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
           const newData = { ...project.scriptData! };
           newData.scenes = newData.scenes.filter(s => !compareIds(s.id, sceneId));
           updateProject({ scriptData: newData });
-          PS.removeScene(project.id, sceneId);
           showAlert(`场景 "${scene.location}" 已删除`, { type: 'success' });
         }
       }
@@ -700,7 +678,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     if (!newData.props) newData.props = [];
     newData.props.push(newProp);
     updateProject({ scriptData: newData });
-    PS.addProp(project.id, newProp);
     showAlert('新道具已创建，请编辑描述和提示词并生成图片', { type: 'success' });
   };
 
@@ -729,7 +706,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
             return { ...shot, props: shot.props.filter(id => id !== propId) };
           });
           updateProject({ scriptData: newData, shots: nextShots });
-          PS.removeProp(project.id, propId);
           showAlert(`道具 "${prop.name}" 已删除`, { type: 'success' });
         }
       }
@@ -811,7 +787,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
         }
         return { ...prev, scriptData: newData };
       });
-      PS.patchProp(project.id, propId, { referenceImage: base64 });
     } catch (e: any) {
       showAlert(e.message, { type: 'error' });
     }
@@ -827,7 +802,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     if (prop) {
       prop.visualPrompt = newPrompt;
       updateProject({ scriptData: newData });
-      PS.patchProp(project.id, propId, { visualPrompt: newPrompt });
     }
   };
 
@@ -843,7 +817,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       if (updates.category !== undefined) prop.category = updates.category;
       if (updates.description !== undefined) prop.description = updates.description;
       updateProject({ scriptData: newData });
-      PS.patchProp(project.id, propId, updates);
     }
   };
 
@@ -933,7 +906,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     char.variations.push(newVar);
     
     updateProject({ scriptData: newData });
-    PS.addVariation(project.id, charId, newVar);
   };
 
   /**
@@ -947,7 +919,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     
     char.variations = char.variations?.filter(v => !compareIds(v.id, varId));
     updateProject({ scriptData: newData });
-    PS.removeVariation(project.id, charId, varId);
   };
 
   /**
@@ -1029,7 +1000,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
         }
         return { ...prev, scriptData: newData };
       });
-      PS.patchVariation(project.id, charId, varId, { referenceImage: base64 });
     } catch (e: any) {
       showAlert(e.message, { type: 'error' });
     }
@@ -1165,12 +1135,6 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       }
       return { ...prev, scriptData: newData };
     });
-    const char = project.scriptData?.characters.find(c => compareIds(c.id, charId));
-    if (char?.turnaround?.panels && char.turnaround.panels[index]) {
-      const panels = [...char.turnaround.panels];
-      panels[index] = { ...panels[index], ...updates };
-      PS.patchCharacter(project.id, charId, { turnaround: { ...char.turnaround, panels } });
-    }
   };
 
   /**

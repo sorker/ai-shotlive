@@ -623,7 +623,7 @@ export async function loadProjectNormalized(
     const cid = v.character_id;
     if (!variationsByChar.has(cid)) variationsByChar.set(cid, []);
     const fallback = (v.reference_image || v.reference_image_url) ? `${imgBase}/variation/${v.id}` : undefined;
-    const imgSafe = sanitizeImageField(v.reference_image_url || v.reference_image, fallback);
+    const imgSafe = sanitizeImageField(v.reference_image || v.reference_image_url, fallback);
     variationsByChar.get(cid)!.push({
       id: v.id,
       name: v.name || '',
@@ -647,7 +647,7 @@ export async function loadProjectNormalized(
       : undefined;
 
     const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/character/${r.id}` : undefined;
-    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image, fallback);
+    const imgSafe = sanitizeImageField(r.reference_image || r.reference_image_url, fallback);
     return {
       id: r.id,
       name: r.name || '',
@@ -668,7 +668,7 @@ export async function loadProjectNormalized(
   // ── 组装场景 ──
   const scenes = sceneRows.map(r => {
     const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/scene/${r.id}` : undefined;
-    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image, fallback);
+    const imgSafe = sanitizeImageField(r.reference_image || r.reference_image_url, fallback);
     return {
       id: r.id,
       location: r.location || '',
@@ -685,7 +685,7 @@ export async function loadProjectNormalized(
   // ── 组装道具 ──
   const props = propRows.map(r => {
     const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/prop/${r.id}` : undefined;
-    const imgSafe = sanitizeImageField(r.reference_image_url || r.reference_image, fallback);
+    const imgSafe = sanitizeImageField(r.reference_image || r.reference_image_url, fallback);
     return {
       id: r.id,
       name: r.name || '',
