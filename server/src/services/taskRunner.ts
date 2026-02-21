@@ -10,7 +10,7 @@
 
 import { Pool, PoolConnection } from 'mysql2/promise';
 import { RowDataPacket } from 'mysql2';
-import { resolveToFilePath } from './fileStorage.js';
+import { resolveToFilePath, resolveApiUrlToBase64, isFilePath, readFileAsBuffer } from './fileStorage.js';
 import {
   createGenericAsyncVideoTask,
   pollGenericAsyncVideoTask,
@@ -370,7 +370,7 @@ const executeTask = async (
         result = await executeVideoTask(pool, taskId, params, registry);
         break;
       case 'image':
-        result = await executeImageTask(pool, taskId, params, registry);
+        result = await executeImageTask(pool, taskId, params, registry, userId);
         break;
       case 'chat':
         result = await executeChatTask(pool, taskId, params, registry);
@@ -483,20 +483,152 @@ const executeVideoTask = async (
 };
 
 /**
+ * 解析参考图数组：将 /api/ 内部 URL 转为可用的 base64 data URI
+ *
+ * 解析策略（按优先级）：
+ * 1. 本地磁盘文件（通过 resolveApiUrlToBase64）
+ * 2. 数据库中的 reference_image（可能是文件路径、base64 或 URL）
+ * 3. 如果都失败，跳过该参考图（不阻断任务）
+ */
+const resolveReferenceImages = async (
+  pool: Pool,
+  rawImages: string[],
+  userId?: number
+): Promise<string[]> => {
+  const resolved: string[] = [];
+
+  for (const img of rawImages) {
+    if (!img) continue;
+
+    // 已经是 data URL 或 HTTP URL → 直接使用
+    if (img.startsWith('data:') || /^https?:\/\//i.test(img)) {
+      resolved.push(img);
+      continue;
+    }
+
+    // 内部 API URL → 先尝试文件系统，再查 DB
+    const apiMatch = img.match(/^\/api\/projects\/([^/]+)\/image\/([^/]+)\/([^/]+)$/);
+    if (apiMatch) {
+      // 策略 1：从本地文件读取
+      const fromFile = resolveApiUrlToBase64(img);
+      if (fromFile) {
+        console.log(`  📂 [TaskRunner] 参考图已从本地文件解析: ${img}`);
+        resolved.push(fromFile);
+        continue;
+      }
+
+      // 策略 2：从数据库读取
+      if (userId != null) {
+        const fromDb = await resolveRefImageFromDb(pool, apiMatch[1], apiMatch[2], apiMatch[3], userId);
+        if (fromDb) {
+          console.log(`  📂 [TaskRunner] 参考图已从数据库解析: ${img}`);
+          resolved.push(fromDb);
+          continue;
+        }
+      }
+
+      console.warn(`  ⚠️ [TaskRunner] 无法解析参考图，已跳过: ${img}`);
+      continue;
+    }
+
+    // 其他格式原样保留
+    resolved.push(img);
+  }
+
+  return resolved;
+};
+
+/**
+ * 从数据库查找参考图并转为 base64 data URI
+ */
+const resolveRefImageFromDb = async (
+  pool: Pool,
+  projectId: string,
+  entityType: string,
+  entityId: string,
+  userId: number
+): Promise<string | null> => {
+  try {
+    let query: string;
+    let imageColumn = 'reference_image';
+    switch (entityType) {
+      case 'character':
+        query = 'SELECT reference_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
+        break;
+      case 'scene':
+        query = 'SELECT reference_image FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ?';
+        break;
+      case 'prop':
+        query = 'SELECT reference_image FROM script_props WHERE id = ? AND project_id = ? AND user_id = ?';
+        break;
+      case 'variation':
+        query = 'SELECT reference_image FROM character_variations WHERE id = ? AND project_id = ? AND user_id = ?';
+        break;
+      case 'turnaround':
+        query = 'SELECT turnaround_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
+        imageColumn = 'turnaround_image';
+        break;
+      case 'ninegrid':
+        query = 'SELECT nine_grid_image FROM shots WHERE id = ? AND project_id = ? AND user_id = ?';
+        imageColumn = 'nine_grid_image';
+        break;
+      default:
+        return null;
+    }
+
+    const [rows] = await pool.execute<RowDataPacket[]>(query!, [entityId, projectId, userId]);
+    if (rows.length === 0 || !rows[0][imageColumn]) return null;
+
+    let value = rows[0][imageColumn] as string;
+
+    // JSON 脏数据 {"base64":"...","url":"..."}
+    if (value.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(value);
+        value = parsed.base64 || parsed.url || value;
+      } catch { /* ignore */ }
+    }
+
+    // 文件路径 → 读文件转 base64
+    if (isFilePath(value)) {
+      const fileData = readFileAsBuffer(value);
+      if (fileData) {
+        return `data:${fileData.mime};base64,${fileData.buffer.toString('base64')}`;
+      }
+    }
+
+    // base64 data URI → 直接使用
+    if (value.startsWith('data:')) return value;
+
+    // HTTP URL → 原样返回（可能是过期 TOS URL，但让 AI API 自行尝试）
+    if (/^https?:\/\//i.test(value)) return value;
+
+    return null;
+  } catch (e: any) {
+    console.warn(`  ⚠️ [TaskRunner] DB 参考图查找失败 (${entityType}/${entityId}): ${e.message}`);
+    return null;
+  }
+};
+
+/**
  * 执行图片生成任务
  */
 const executeImageTask = async (
   pool: Pool,
   taskId: string,
   params: TaskCreateParams,
-  registry: ModelRegistryState
+  registry: ModelRegistryState,
+  userId?: number
 ): Promise<string> => {
-  const { modelId, prompt, referenceImages = [], aspectRatio = '16:9', isVariation, hasTurnaround } = params;
+  const { modelId, prompt, referenceImages: rawRefImages = [], aspectRatio = '16:9', isVariation, hasTurnaround } = params;
   const { apiBase, apiKey, model } = resolveModelConfig(registry, 'image', modelId);
 
   const actualModelId = model.apiModel || model.id || modelId;
   const endpoint = model.endpoint || `/v1beta/models/${actualModelId}:generateContent`;
   const apiFormat = (model.params as any)?.apiFormat || 'gemini';
+
+  // 解析参考图：将内部 API URL 转为 base64，避免依赖已过期的 TOS 签名 URL
+  const referenceImages = await resolveReferenceImages(pool, rawRefImages, userId);
 
   // 诊断日志：参考图信息
   const refImgSummary = referenceImages.map((img, i) => {
@@ -510,8 +642,6 @@ const executeImageTask = async (
     console.log(`  📋 参考图详情:\n${refImgSummary.join('\n')}`);
   }
 
-  // 当有参考图片时，为提示词添加参考图指令包装
-  // 告知 AI 模型每张参考图的角色（场景/角色/道具），确保模型正确使用参考图
   const finalPrompt = wrapPromptWithReferenceGuide(prompt, referenceImages, isVariation, hasTurnaround);
 
   if (apiFormat === 'openai-image') {
@@ -519,8 +649,6 @@ const executeImageTask = async (
       apiBase, apiKey, endpoint, modelId: actualModelId,
       prompt: finalPrompt, referenceImages, aspectRatio,
     });
-    // OpenAI-image API 返回结构化结果（base64 + 原始 URL）
-    // 编码为 JSON 以便前端同时获取 base64（显示用）和 URL（Seedream 参考图用）
     if (result.originalUrl) {
       return JSON.stringify({ base64: result.base64, url: result.originalUrl });
     }

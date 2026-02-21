@@ -158,13 +158,12 @@ export function resolveToFilePath(
   if (val.startsWith('{')) {
     try {
       const parsed = JSON.parse(val);
-      // 优先 URL
-      if (parsed.url && /^https?:\/\//i.test(parsed.url)) return parsed.url;
-      // 其次提取 base64 保存为文件
+      // 优先保存 base64 为文件（永久可用），避免依赖可能过期的 TOS 签名 URL
       const b64 = parsed.base64;
       if (b64 && isBase64DataUri(b64)) {
-        return saveBase64ToFile(pid, entityType, eid, b64) || null;
+        return saveBase64ToFile(pid, entityType, eid, b64) || parsed.url || null;
       }
+      if (parsed.url && /^https?:\/\//i.test(parsed.url)) return parsed.url;
       return parsed.url || null;
     } catch { /* ignore */ }
   }
@@ -200,6 +199,29 @@ export function readFileAsBuffer(filePath: string): { buffer: Buffer; mime: stri
     buffer: fs.readFileSync(absPath),
     mime: mimeMap[ext] || 'application/octet-stream',
   };
+}
+
+/**
+ * 将内部 API URL（/api/projects/:id/image/:type/:eid）解析为 base64 data URI。
+ * 通过文件系统直接读取本地存储的图片，无需 HTTP 请求或数据库查询。
+ */
+export function resolveApiUrlToBase64(url: string): string | null {
+  const match = url.match(/^\/api\/projects\/([^/]+)\/image\/([^/]+)\/([^/]+)$/);
+  if (!match) return null;
+
+  const [, projectId, entityType, entityId] = match;
+  const safeEntityId = entityId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const dir = path.join('data', projectId, entityType);
+  const exts = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+
+  for (const ext of exts) {
+    const filePath = `${dir}/${safeEntityId}${ext}`;
+    const fileData = readFileAsBuffer(filePath);
+    if (fileData) {
+      return `data:${fileData.mime};base64,${fileData.buffer.toString('base64')}`;
+    }
+  }
+  return null;
 }
 
 /**

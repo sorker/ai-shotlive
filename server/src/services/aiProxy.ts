@@ -764,27 +764,28 @@ export const generateOpenAIImage = async (params: OpenAIImageParams): Promise<Im
     watermark: false,
   };
 
-  // 豆包 Seedream API 的 image 参数仅接受 URL（不支持 base64）
-  // 收集所有可用的 URL 格式参考图
-  const validUrls: string[] = [];
-  let skippedBase64 = 0;
+  // Seedream API 的 image 参数同时支持 URL 和 base64 data URI
+  // 格式: data:image/<format>;base64,<data>（format 必须小写，如 png、jpeg）
+  const validImages: string[] = [];
+  let skippedCount = 0;
   for (const img of referenceImages) {
     if (!img || img.length === 0) continue;
     if (/^https?:\/\//i.test(img)) {
-      validUrls.push(img);
+      validImages.push(img);
+    } else if (/^data:image\/[a-z]+;base64,/i.test(img)) {
+      validImages.push(img);
     } else {
-      // base64 图片无法直接用于 Seedream API，需要 URL
-      skippedBase64++;
+      skippedCount++;
+      console.warn(`  ⚠️ [aiProxy] OpenAI-image: 跳过不支持的参考图格式 (${img.substring(0, 40)}...)`);
     }
   }
-  if (skippedBase64 > 0) {
-    console.warn(`  ⚠️ [aiProxy] OpenAI-image: 跳过 ${skippedBase64} 张 base64 参考图（该 API 仅支持 URL）`);
-  }
-  if (validUrls.length > 0) {
-    requestBody.image = validUrls;
-    console.log(`  🖼️ [aiProxy] OpenAI-image: 使用 ${validUrls.length} 张 URL 参考图`);
+  if (validImages.length > 0) {
+    requestBody.image = validImages;
+    const urlCount = validImages.filter(i => /^https?:\/\//i.test(i)).length;
+    const b64Count = validImages.length - urlCount;
+    console.log(`  🖼️ [aiProxy] OpenAI-image: 使用 ${validImages.length} 张参考图 (${urlCount} URL + ${b64Count} base64)`);
   } else if (referenceImages.length > 0) {
-    console.warn(`  ⚠️ [aiProxy] OpenAI-image: 没有可用的 URL 参考图（共 ${referenceImages.length} 张均为 base64 格式）`);
+    console.warn(`  ⚠️ [aiProxy] OpenAI-image: 没有可用的参考图（共 ${referenceImages.length} 张均不支持）`);
   }
 
   const response = await retryOp(async () => {
