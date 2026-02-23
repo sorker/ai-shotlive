@@ -1,13 +1,14 @@
 import React from 'react';
 import { QUICK_START_OPTIONS } from './constants';
-import { FileText, Film } from 'lucide-react';
+import { BookOpen, FileText, Film } from 'lucide-react';
 
 interface ActionPageProps {
   onComplete: () => void;
   onQuickStart: (option: 'script' | 'example') => void;
 }
 
-const icons = {
+const icons: Record<string, React.ComponentType<{ className?: string }>> = {
+  novel: BookOpen,
   script: FileText,
   example: Film,
 };

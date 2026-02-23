@@ -40,28 +40,33 @@ export const WORKFLOW_STEPS = [
 export const HIGHLIGHTS = [
   {
     icon: '📖',
-    title: '小说管理一体化',
-    description: '项目配置、小说上传、章节解析、剧集管理集中在同一页面',
+    title: '小说一体化',
+    description: '项目设置、小说上传、剧集管理同页完成',
   },
   {
     icon: '🎬',
     title: '首尾帧衔接',
-    description: '可复制上一镜尾帧到下一镜首帧，镜头过渡更连贯',
+    description: '上一镜尾帧复制到下一镜首帧',
   },
   {
     icon: '🧩',
     title: '九宫格分镜',
-    description: '一键拆分9个视角，支持整图或裁剪格子设为首帧',
+    description: '9个视角预览，选格子设为首帧',
   },
   {
     icon: '👔',
     title: '角色衣橱',
-    description: '同一角色，多套造型随时切换',
+    description: '同一角色多套造型随时切换',
+  },
+  {
+    icon: '🎨',
+    title: '多模型支持',
+    description: '文本/图像/视频自选厂商模型',
   },
   {
     icon: '🔐',
     title: '账户管理',
-    description: '点击用户名即可修改用户名和密码',
+    description: '点击用户名修改密码或用户名',
   },
 ] as const;
 
