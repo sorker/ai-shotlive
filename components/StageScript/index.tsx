@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ProjectState, Shot } from '../../types';
 import { useAlert } from '../GlobalAlert';
-import { parseScriptToData, generateShotList, continueScript, continueScriptStream, rewriteScript, rewriteScriptStream, setScriptLogCallback, clearScriptLogCallback, logScriptProgress } from '../../services/aiService';
+import { continueScript, continueScriptStream, rewriteScript, rewriteScriptStream, setScriptLogCallback, clearScriptLogCallback, logScriptProgress } from '../../services/aiService';
+import { parseScriptServerSide, getActiveTasksForProject, waitForTask } from '../../services/taskService';
 import { Clapperboard } from 'lucide-react';
 import { getFinalValue, validateConfig } from './utils';
 import { DEFAULTS } from './constants';
@@ -145,6 +146,52 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     return () => clearScriptLogCallback();
   }, []);
 
+  // 页面刷新后恢复正在运行的剧本解析任务
+  useEffect(() => {
+    if (!project.id || isProcessing) return;
+
+    const recoverScriptParseTask = async () => {
+      try {
+        const activeTasks = await getActiveTasksForProject(project.id);
+        const scriptTask = activeTasks.find(t => t.type === 'script_parse');
+        if (!scriptTask) return;
+
+        console.log(`🔄 [StageScript] 发现正在运行的剧本解析任务: ${scriptTask.id}`);
+        setIsProcessing(true);
+        setProcessingMessage(`正在恢复后台解析任务 (${scriptTask.progress}%)...`);
+        logScriptProgress('检测到未完成的后台解析任务，正在恢复...');
+
+        const resultStr = await waitForTask(scriptTask.id, {
+          onProgress: (progress, status) => {
+            setProcessingMessage(`后台解析中 (${progress}%) - 刷新页面不影响进度`);
+          },
+          timeout: 15 * 60 * 1000,
+          pollInterval: 3000,
+        });
+
+        const { scriptData, shots } = JSON.parse(resultStr);
+        updateProject({
+          scriptData,
+          shots,
+          isParsingScript: false,
+          title: scriptData.title,
+        });
+        setActiveTab('script');
+        console.log('✅ [StageScript] 后台剧本解析任务恢复完成');
+      } catch (err: any) {
+        console.error('❌ [StageScript] 恢复解析任务失败:', err.message);
+        setError(`恢复解析任务失败: ${err.message}`);
+        updateProject({ isParsingScript: false });
+        PS.patchProject(project.id, { isParsingScript: false });
+      } finally {
+        setIsProcessing(false);
+        setProcessingMessage('');
+      }
+    };
+
+    recoverScriptParseTask();
+  }, [project.id]);
+
   const handleAnalyze = async () => {
     const finalDuration = getFinalValue(localDuration, customDurationInput);
     const finalModel = getFinalValue(localModel, customModelInput);
@@ -170,7 +217,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     logScriptProgress(`视觉风格：${finalVisualStyle}`);
 
     setIsProcessing(true);
-    setProcessingMessage('正在解析剧本...');
+    setProcessingMessage('正在解析剧本（后台运行中，刷新不会中断）...');
     setProcessingLogs([]);
     setError(null);
     try {
@@ -187,10 +234,44 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         isParsingScript: true
       });
 
-      console.log('📞 调用 parseScriptToData, 传入模型:', finalModel);
-      logScriptProgress('开始解析剧本...');
-      const scriptData = await parseScriptToData(localScript, localLanguage, finalModel, finalVisualStyle);
-      
+      PS.patchProject(project.id, {
+        rawScript: localScript,
+        targetDuration: finalDuration,
+        language: localLanguage,
+        visualStyle: finalVisualStyle,
+        shotGenerationModel: finalModel,
+        isParsingScript: true,
+      });
+
+      logScriptProgress('正在提交后台解析任务...');
+      const result = await parseScriptServerSide(
+        project.id,
+        localScript,
+        finalModel,
+        {
+          language: localLanguage,
+          visualStyle: finalVisualStyle,
+          targetDuration: finalDuration,
+          title: localTitle && localTitle !== '未命名项目' ? localTitle : undefined,
+          onProgress: (progress, status) => {
+            const phaseMessages: Record<string, string> = {
+              pending: '等待开始...',
+              running: '正在解析...',
+              polling: '正在解析...',
+            };
+            const msg = phaseMessages[status] || `进度 ${progress}%`;
+            setProcessingMessage(`后台解析中 (${progress}%) - ${msg}`);
+            if (progress > 0 && progress <= 20) logScriptProgress('正在解析剧本结构...');
+            else if (progress > 20 && progress <= 35) logScriptProgress('正在生成美术指导文档...');
+            else if (progress > 35 && progress <= 60) logScriptProgress('正在生成角色视觉提示词...');
+            else if (progress > 60 && progress <= 75) logScriptProgress('正在生成场景视觉提示词...');
+            else if (progress > 75) logScriptProgress('正在生成分镜列表...');
+          },
+        }
+      );
+
+      const { scriptData, shots } = result;
+
       scriptData.targetDuration = finalDuration;
       scriptData.language = localLanguage;
       scriptData.visualStyle = finalVisualStyle;
@@ -200,11 +281,6 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         scriptData.title = localTitle;
       }
 
-      console.log('📞 调用 generateShotList, 传入模型:', finalModel);
-      logScriptProgress('开始生成分镜...');
-      setProcessingMessage('正在生成分镜...');
-      const shots = await generateShotList(scriptData, finalModel);
-
       updateProject({ 
         scriptData, 
         shots, 
@@ -212,23 +288,13 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         title: scriptData.title 
       });
 
-      // 增量保存解析结果到服务端
-      PS.saveParseResult(project.id, scriptData, shots, {
-        title: scriptData.title,
-        rawScript: localScript,
-        targetDuration: finalDuration,
-        language: localLanguage,
-        visualStyle: finalVisualStyle,
-        shotGenerationModel: finalModel,
-        isParsingScript: false,
-      });
-      
       setActiveTab('script');
 
     } catch (err: any) {
       console.error(err);
       setError(`错误: ${err.message || "AI 连接失败"}`);
       updateProject({ isParsingScript: false });
+      PS.patchProject(project.id, { isParsingScript: false });
     } finally {
       setIsProcessing(false);
       setProcessingMessage('');

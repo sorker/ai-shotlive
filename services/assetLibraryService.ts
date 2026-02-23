@@ -5,9 +5,19 @@ const generateId = (prefix: string): string => {
   return `${prefix}-${Date.now().toString(36)}-${rand}`;
 };
 
+/**
+ * Strip JWT auth tokens from /api/ image URLs before persisting to the asset library.
+ * Prevents stale tokens from being stored and causing 401 errors on future imports.
+ */
+const stripToken = (url: string | undefined): string | undefined => {
+  if (!url || !url.startsWith('/api/')) return url;
+  return url.split('?')[0];
+};
+
 const cloneCharacterVariation = (variation: Character['variations'][number]) => ({
   ...variation,
   id: generateId('var'),
+  referenceImage: stripToken(variation.referenceImage),
   status: variation.referenceImage ? 'completed' : 'pending'
 });
 
@@ -26,7 +36,8 @@ export const createLibraryItemFromCharacter = (
     updatedAt: now,
     data: {
       ...character,
-      variations: (character.variations || []).map((v) => ({ ...v }))
+      referenceImage: stripToken(character.referenceImage),
+      variations: (character.variations || []).map((v) => ({ ...v, referenceImage: stripToken(v.referenceImage) }))
     }
   };
 };
@@ -44,7 +55,7 @@ export const createLibraryItemFromScene = (
     projectName: project?.title,
     createdAt: now,
     updatedAt: now,
-    data: { ...scene }
+    data: { ...scene, referenceImage: stripToken(scene.referenceImage) }
   };
 };
 
@@ -78,7 +89,7 @@ export const createLibraryItemFromProp = (
     projectName: project?.title,
     createdAt: now,
     updatedAt: now,
-    data: { ...prop }
+    data: { ...prop, referenceImage: stripToken(prop.referenceImage) }
   };
 };
 

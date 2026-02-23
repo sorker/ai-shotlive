@@ -146,8 +146,15 @@ export function resolveToFilePath(
   // 正常 URL（HTTP / HTTPS）→ 原样保留
   if (/^https?:\/\//i.test(val)) return val;
 
-  // API 回退 URL → 原样保留（不应出现在写入路径，但兜底）
-  if (val.startsWith('/api/')) return val;
+  // API 回退 URL → 解析并复制源文件到新实体路径（跨剧本/项目导入场景）
+  if (val.startsWith('/api/')) {
+    const cleanUrl = val.split('?')[0];
+    const fromFile = resolveApiUrlToBase64(cleanUrl);
+    if (fromFile) {
+      return saveBase64ToFile(pid, entityType, eid, fromFile) || null;
+    }
+    return val;
+  }
 
   // base64 data URI → 保存为文件
   if (isBase64DataUri(val)) {

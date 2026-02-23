@@ -35,8 +35,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const params = req.body as TaskCreateParams;
 
     // 参数验证
-    if (!params.type || !['video', 'image', 'chat'].includes(params.type)) {
-      res.status(400).json({ error: '无效的任务类型，支持: video, image, chat' });
+    if (!params.type || !['video', 'image', 'chat', 'script_parse'].includes(params.type)) {
+      res.status(400).json({ error: '无效的任务类型，支持: video, image, chat, script_parse' });
       return;
     }
     if (!params.projectId) {

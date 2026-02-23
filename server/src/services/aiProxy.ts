@@ -840,13 +840,16 @@ export interface ChatCompletionParams {
 }
 
 export const serverChatCompletion = async (params: ChatCompletionParams): Promise<string> => {
-  const { apiBase, apiKey, endpoint, model, prompt, temperature = 0.7, responseFormat } = params;
+  const { apiBase, apiKey, endpoint, model, prompt, temperature = 0.7, maxTokens, responseFormat } = params;
 
   const requestBody: any = {
     model,
     messages: [{ role: 'user', content: prompt }],
     temperature,
   };
+  if (maxTokens) {
+    requestBody.max_tokens = maxTokens;
+  }
   if (responseFormat === 'json_object') {
     requestBody.response_format = { type: 'json_object' };
   }

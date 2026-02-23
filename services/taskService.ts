@@ -20,7 +20,7 @@ import { AspectRatio, VideoDuration } from '../types';
 // ============================================
 
 export interface TaskCreateParams {
-  type: 'video' | 'image' | 'chat';
+  type: 'video' | 'image' | 'chat' | 'script_parse';
   projectId: string;
   modelId: string;
   prompt: string;
@@ -40,6 +40,14 @@ export interface TaskCreateParams {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'json_object';
+
+  // 剧本解析参数
+  scriptParseParams?: {
+    language: string;
+    visualStyle: string;
+    targetDuration: string;
+    title?: string;
+  };
 
   // 结果写入目标
   target?: {
@@ -363,6 +371,48 @@ export const chatCompletionServerSide = async (
     timeout: 10 * 60 * 1000, // 文本 10 分钟超时
     pollInterval: 2000,
   });
+};
+
+/**
+ * 在服务端执行剧本解析（提交任务 + 等待结果）
+ *
+ * 替代 scriptService.parseScriptToData + generateShotList，不受页面刷新影响。
+ * 服务端会完成全部解析流程并将结果写入数据库。
+ */
+export const parseScriptServerSide = async (
+  projectId: string,
+  rawText: string,
+  modelId: string,
+  options: {
+    language: string;
+    visualStyle: string;
+    targetDuration: string;
+    title?: string;
+    onProgress?: (progress: number, status: string) => void;
+    signal?: AbortSignal;
+  }
+): Promise<{ scriptData: any; shots: any[] }> => {
+  const task = await submitTask({
+    type: 'script_parse',
+    projectId,
+    modelId,
+    prompt: rawText,
+    scriptParseParams: {
+      language: options.language,
+      visualStyle: options.visualStyle,
+      targetDuration: options.targetDuration,
+      title: options.title,
+    },
+  });
+
+  const resultStr = await waitForTask(task.id, {
+    onProgress: options.onProgress,
+    signal: options.signal,
+    timeout: 15 * 60 * 1000,
+    pollInterval: 3000,
+  });
+
+  return JSON.parse(resultStr);
 };
 
 // ============================================

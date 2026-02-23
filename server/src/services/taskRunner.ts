@@ -23,13 +23,14 @@ import {
   generateOpenAIImage,
   serverChatCompletion,
 } from './aiProxy.js';
+import { parseScriptFull, ScriptParseResult } from './scriptParser.js';
 
 // ============================================
 // 类型定义
 // ============================================
 
 export interface TaskCreateParams {
-  type: 'video' | 'image' | 'chat';
+  type: 'video' | 'image' | 'chat' | 'script_parse';
   projectId: string;
   modelId: string;
   prompt: string;
@@ -50,9 +51,17 @@ export interface TaskCreateParams {
   maxTokens?: number;
   responseFormat?: 'json_object';
 
+  // 剧本解析参数
+  scriptParseParams?: {
+    language: string;
+    visualStyle: string;
+    targetDuration: string;
+    title?: string;
+  };
+
   // 结果写入目标
   target?: {
-    type: string;         // 'keyframe' | 'video_interval' | 'character_image' | 'scene_image' | etc.
+    type: string;         // 'keyframe' | 'video_interval' | 'character_image' | 'scene_image' | 'prop_image' | etc.
     shotId?: string;
     entityId?: string;    // keyframe ID, interval ID, character ID, etc.
   };
@@ -375,6 +384,9 @@ const executeTask = async (
       case 'chat':
         result = await executeChatTask(pool, taskId, params, registry);
         break;
+      case 'script_parse':
+        result = await executeScriptParseTask(pool, taskId, params, registry, userId);
+        break;
       default:
         throw new Error(`未知任务类型: ${params.type}`);
     }
@@ -681,6 +693,162 @@ const executeChatTask = async (
     apiBase, apiKey, endpoint, model: actualModel,
     prompt, temperature, responseFormat,
   });
+};
+
+/**
+ * 执行剧本解析任务（多步骤编排）
+ */
+const executeScriptParseTask = async (
+  pool: Pool,
+  taskId: string,
+  params: TaskCreateParams,
+  registry: ModelRegistryState,
+  userId: number
+): Promise<string> => {
+  const { modelId, prompt: rawText } = params;
+  const spParams = params.scriptParseParams;
+  if (!spParams) throw new Error('缺少 scriptParseParams');
+
+  const { apiBase, apiKey, model } = resolveModelConfig(registry, 'chat', modelId);
+  const actualModel = model.apiModel || model.id || modelId;
+  const endpoint = model.endpoint || '/v1/chat/completions';
+
+  const config = { apiBase, apiKey, endpoint, model: actualModel };
+
+  const result = await parseScriptFull(
+    pool, userId, config,
+    {
+      rawText,
+      language: spParams.language,
+      visualStyle: spParams.visualStyle,
+      targetDuration: spParams.targetDuration,
+      title: spParams.title,
+    },
+    (progress, message) => {
+      updateTaskProgress(pool, taskId, progress).catch(() => {});
+      console.log(`  📊 [ScriptParser] ${taskId}: ${progress}% - ${message}`);
+    }
+  );
+
+  // 将解析结果写入项目表（复用 parse-result 端点的逻辑）
+  await applyScriptParseToProject(pool, userId, params.projectId, result, spParams);
+
+  return JSON.stringify(result);
+};
+
+/**
+ * 将剧本解析结果写入项目数据库
+ */
+const applyScriptParseToProject = async (
+  pool: Pool,
+  userId: number,
+  projectId: string,
+  result: ScriptParseResult,
+  spParams: NonNullable<TaskCreateParams['scriptParseParams']>
+): Promise<void> => {
+  const { scriptData, shots } = result;
+
+  // 获取项目当前激活的 episode_id
+  const [projRows] = await pool.execute<any[]>(
+    'SELECT selected_episode_id FROM projects WHERE id = ? AND user_id = ?',
+    [projectId, userId]
+  );
+  const episodeId = projRows[0]?.selected_episode_id || '';
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 更新项目元数据
+    await conn.execute(
+      `UPDATE projects SET
+        has_script_data = 1, script_title = ?, script_genre = ?, script_logline = ?,
+        art_direction = ?, visual_style = ?, language = ?, target_duration = ?,
+        shot_generation_model = ?, is_parsing_script = 0,
+        last_modified_ms = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [
+        scriptData.title, scriptData.genre, scriptData.logline,
+        scriptData.artDirection ? JSON.stringify(scriptData.artDirection) : null,
+        spParams.visualStyle, spParams.language, spParams.targetDuration,
+        scriptData.shotGenerationModel || null,
+        Date.now(), projectId, userId,
+      ]
+    );
+
+    // 清空当前剧本的数据
+    const scriptTables = ['script_characters', 'character_variations', 'script_scenes', 'script_props', 'story_paragraphs'];
+    for (const table of scriptTables) {
+      await conn.execute(`DELETE FROM \`${table}\` WHERE project_id = ? AND user_id = ? AND episode_id = ?`, [projectId, userId, episodeId]);
+    }
+    await conn.execute('DELETE FROM shot_keyframes WHERE project_id = ? AND user_id = ? AND episode_id = ?', [projectId, userId, episodeId]);
+    await conn.execute('DELETE FROM shot_video_intervals WHERE project_id = ? AND user_id = ? AND episode_id = ?', [projectId, userId, episodeId]);
+    await conn.execute('DELETE FROM shots WHERE project_id = ? AND user_id = ? AND episode_id = ?', [projectId, userId, episodeId]);
+
+    // 写入角色
+    for (let i = 0; i < scriptData.characters.length; i++) {
+      const ch = scriptData.characters[i];
+      await conn.execute(
+        `INSERT INTO script_characters
+         (id, project_id, user_id, episode_id, name, gender, age, personality, visual_prompt, negative_prompt, status, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ch.id, projectId, userId, episodeId, ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
+         ch.visualPrompt || '', ch.negativePrompt || null, 'pending', i]
+      );
+    }
+
+    // 写入场景
+    for (let i = 0; i < scriptData.scenes.length; i++) {
+      const s = scriptData.scenes[i];
+      await conn.execute(
+        `INSERT INTO script_scenes
+         (id, project_id, user_id, episode_id, location, time_period, atmosphere, visual_prompt, negative_prompt, status, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [s.id, projectId, userId, episodeId, s.location || '', s.time || '', s.atmosphere || '',
+         s.visualPrompt || '', s.negativePrompt || null, 'pending', i]
+      );
+    }
+
+    // 写入段落
+    for (let i = 0; i < scriptData.storyParagraphs.length; i++) {
+      const p = scriptData.storyParagraphs[i];
+      await conn.execute(
+        `INSERT INTO story_paragraphs (paragraph_id, project_id, user_id, episode_id, text, scene_ref_id, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [p.id, projectId, userId, episodeId, p.text || '', p.sceneRefId || '', i]
+      );
+    }
+
+    // 写入镜头
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i];
+      await conn.execute(
+        `INSERT INTO shots
+         (id, project_id, user_id, episode_id, scene_id, action_summary, dialogue,
+          camera_movement, shot_size, characters_json, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [shot.id, projectId, userId, episodeId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
+         shot.cameraMovement || '', shot.shotSize || null,
+         JSON.stringify(shot.characters || []), i]
+      );
+
+      for (const kf of shot.keyframes || []) {
+        await conn.execute(
+          `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '', 'pending']
+        );
+      }
+    }
+
+    await conn.commit();
+    console.log(`  📝 [ScriptParser] 解析结果已写入数据库: ${scriptData.characters.length} 角色, ${scriptData.scenes.length} 场景, ${shots.length} 分镜`);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 };
 
 // ============================================

@@ -23,8 +23,28 @@ import { useAlert } from '../GlobalAlert';
 import { getAllAssetLibraryItems, saveAssetToLibrary, deleteAssetFromLibrary } from '../../services/storageService';
 import { applyLibraryItemToProject, createLibraryItemFromCharacter, createLibraryItemFromScene, createLibraryItemFromProp, cloneCharacterForProject, cloneSceneForProject, clonePropForProject } from '../../services/assetLibraryService';
 import * as PS from '../../services/projectPatchService';
+import { getToken } from '../../services/apiClient';
 import { AspectRatioSelector } from '../AspectRatioSelector';
 import { getUserAspectRatio, setUserAspectRatio, getActiveImageModel } from '../../services/modelRegistry';
+
+/**
+ * 清理图片 URL 中的旧 token，用于跨剧本/项目导入资产时避免重复/过期 token 问题。
+ * 返回不带 token 的干净 URL（后端 resolveToFilePath 会负责将 /api/ URL 解析为文件副本）
+ */
+const stripAuthToken = (url: string | undefined): string | undefined => {
+  if (!url || !url.startsWith('/api/')) return url;
+  return url.split('?')[0];
+};
+
+/**
+ * 为 /api/ 图片 URL 追加当前 token，用于 React 状态下 <img src> 即时显示
+ */
+const withAuthToken = (url: string | undefined): string | undefined => {
+  if (!url || !url.startsWith('/api/')) return url;
+  const clean = url.split('?')[0];
+  const token = getToken();
+  return token ? `${clean}?token=${token}` : clean;
+};
 
 interface Props {
   project: ProjectState;
@@ -456,25 +476,32 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
 
       if (item.type === 'character') {
         const character = cloneCharacterForProject(item.data as Character);
+        const displayChar = { ...character, referenceImage: withAuthToken(character.referenceImage) ?? character.referenceImage };
         patchScriptData(data => ({
           ...data,
-          characters: [...data.characters, character],
+          characters: [...data.characters, displayChar],
         }));
-        PS.addCharacter(project.id, character);
+        PS.addCharacter(project.id, {
+          ...character,
+          referenceImage: stripAuthToken(character.referenceImage),
+          variations: (character.variations || []).map(v => ({ ...v, referenceImage: stripAuthToken(v.referenceImage) })),
+        });
       } else if (item.type === 'scene') {
         const scene = cloneSceneForProject(item.data as Scene);
+        const displayScene = { ...scene, referenceImage: withAuthToken(scene.referenceImage) ?? scene.referenceImage };
         patchScriptData(data => ({
           ...data,
-          scenes: [...data.scenes, scene],
+          scenes: [...data.scenes, displayScene],
         }));
-        PS.addScene(project.id, scene);
+        PS.addScene(project.id, { ...scene, referenceImage: stripAuthToken(scene.referenceImage) });
       } else if (item.type === 'prop') {
         const prop = clonePropForProject(item.data as Prop);
+        const displayProp = { ...prop, referenceImage: withAuthToken(prop.referenceImage) ?? prop.referenceImage };
         patchScriptData(data => ({
           ...data,
-          props: [...(data.props || []), prop],
+          props: [...(data.props || []), displayProp],
         }));
-        PS.addProp(project.id, prop);
+        PS.addProp(project.id, { ...prop, referenceImage: stripAuthToken(prop.referenceImage) });
       }
 
       showAlert(`已导入：${item.name}`, { type: 'success' });
@@ -494,6 +521,12 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     const previous = project.scriptData.characters.find(c => compareIds(c.id, targetId));
     if (!previous) return;
 
+    // For React state: use current auth token so <img> can display immediately
+    const displayChar = {
+      ...cloned,
+      referenceImage: withAuthToken(cloned.referenceImage) ?? cloned.referenceImage,
+    };
+
     updateProject((prev) => {
       if (!prev.scriptData) return prev;
       return {
@@ -501,7 +534,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
         scriptData: {
           ...prev.scriptData,
           characters: prev.scriptData.characters.map(c =>
-            compareIds(c.id, targetId) ? { ...cloned, id: c.id } : c
+            compareIds(c.id, targetId) ? { ...displayChar, id: c.id } : c
           ),
         },
         shots: prev.shots.map((shot) => {
@@ -515,7 +548,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       };
     });
 
-    // Persist character replacement to backend
+    // For backend: strip stale tokens — resolveToFilePath will copy the actual image file
     PS.patchCharacter(project.id, targetId, {
       name: cloned.name,
       gender: cloned.gender,
@@ -524,7 +557,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       visualPrompt: cloned.visualPrompt,
       negativePrompt: cloned.negativePrompt,
       coreFeatures: cloned.coreFeatures,
-      referenceImage: cloned.referenceImage,
+      referenceImage: stripAuthToken(cloned.referenceImage),
       referenceImageUrl: cloned.referenceImageUrl,
       status: cloned.status,
       turnaround: cloned.turnaround || null,
@@ -535,7 +568,10 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       PS.removeVariation(project.id, targetId, v.id);
     }
     for (const v of (cloned.variations || [])) {
-      PS.addVariation(project.id, targetId, v);
+      PS.addVariation(project.id, targetId, {
+        ...v,
+        referenceImage: stripAuthToken(v.referenceImage),
+      });
     }
 
     // Update shots that had characterVariations for this character
