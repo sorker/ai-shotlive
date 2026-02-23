@@ -1,5 +1,5 @@
 import { ProjectState, AssetLibraryItem, NovelChapter, NovelEpisode } from '../types';
-import { apiGet, apiPut, apiDelete, apiPost, getToken } from './apiClient';
+import { apiGet, apiPut, apiDelete, apiPost, apiFetch, getToken } from './apiClient';
 
 /**
  * 清洗图片字段：如果是 JSON 脏数据 {"base64":"...","url":"..."}，提取出有效值
@@ -119,6 +119,66 @@ export const importIndexedDBData = async (
     ...payload,
     mode: options?.mode || 'merge',
   });
+};
+
+// ─── 数据库级导出/导入（ZIP 归档）─────────────────────────────────
+
+/**
+ * 导出当前用户全部数据（数据库 + data 文件夹）为 ZIP 下载
+ */
+export const exportUserDataArchive = async (): Promise<void> => {
+  const res = await apiFetch('/api/data-transfer/export');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: '导出失败' }));
+    throw new Error(err.error || `导出失败 (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+  const filename = filenameMatch?.[1] || `aishotlive_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+export interface ImportArchiveResult {
+  success: boolean;
+  newUser: {
+    username: string;
+    defaultPassword: string;
+  };
+  stats: {
+    projects: number;
+    assets: number;
+    files: number;
+  };
+}
+
+/**
+ * 导入 ZIP 归档数据，自动创建新用户
+ */
+export const importUserDataArchive = async (file: File): Promise<ImportArchiveResult> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await apiFetch('/api/data-transfer/import', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: '导入失败' }));
+    throw new Error(err.error || `导入失败 (${res.status})`);
+  }
+
+  return res.json();
 };
 
 /**

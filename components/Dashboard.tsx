@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Database, Settings, Sun, Moon, LogOut, Palette } from 'lucide-react';
 import { ProjectState, AssetLibraryItem, Character, Scene } from '../types';
-import { getAllProjectsMetadata, createNewProjectState, deleteProjectFromDB, getAllAssetLibraryItems, deleteAssetFromLibrary, loadProjectFromDB, saveProjectToDB, exportIndexedDBData, importIndexedDBData } from '../services/storageService';
+import { getAllProjectsMetadata, createNewProjectState, deleteProjectFromDB, getAllAssetLibraryItems, deleteAssetFromLibrary, loadProjectFromDB, saveProjectToDB, exportUserDataArchive, importUserDataArchive } from '../services/storageService';
 import { applyLibraryItemToProject } from '../services/assetLibraryService';
 import { useAlert } from './GlobalAlert';
 import { useTheme } from '../contexts/ThemeContext';
@@ -165,21 +165,8 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
 
     setIsDataExporting(true);
     try {
-      const payload = await exportIndexedDBData();
-      const json = JSON.stringify(payload, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `aishotlive_backup_${timestamp}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      showAlert('导出完成，备份文件已下载。', { type: 'success' });
+      await exportUserDataArchive();
+      showAlert('导出完成，备份文件已下载。包含数据库数据及所有媒体文件。', { type: 'success' });
     } catch (error) {
       console.error('Export failed:', error);
       showAlert(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`, { type: 'error' });
@@ -198,42 +185,37 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
     event.target.value = '';
     if (!file) return;
 
-    if (!file.name.endsWith('.json')) {
-      showAlert('请选择 .json 备份文件。', { type: 'warning' });
+    if (!file.name.endsWith('.zip')) {
+      showAlert('请选择 .zip 备份文件。', { type: 'warning' });
       return;
     }
 
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      const projectCount = payload?.stores?.projects?.length || 0;
-      const assetCount = payload?.stores?.assetLibrary?.length || 0;
-      const confirmMessage = `将导入 ${projectCount} 个项目和 ${assetCount} 个资产。若 ID 冲突将覆盖现有数据。是否继续？`;
+    const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+    const confirmMessage = `将导入备份文件（${sizeMB} MB）。系统将自动创建新用户并导入全部数据。是否继续？`;
 
-      showAlert(confirmMessage, {
-        type: 'warning',
-        showCancel: true,
-        onConfirm: async () => {
-          try {
-            setIsDataImporting(true);
-            const result = await importIndexedDBData(payload, { mode: 'merge' });
-            await loadProjects();
-            if (showLibraryModal) {
-              await loadLibrary();
-            }
-            showAlert(`导入完成：项目 ${result.projects} 个，资产 ${result.assets} 个。`, { type: 'success' });
-          } catch (error) {
-            console.error('Import failed:', error);
-            showAlert(`导入失败: ${error instanceof Error ? error.message : '未知错误'}`, { type: 'error' });
-          } finally {
-            setIsDataImporting(false);
-          }
+    showAlert(confirmMessage, {
+      type: 'warning',
+      showCancel: true,
+      onConfirm: async () => {
+        try {
+          setIsDataImporting(true);
+          const result = await importUserDataArchive(file);
+          showAlert(
+            `导入完成！\n\n` +
+            `已创建新用户：${result.newUser.username}\n` +
+            `默认密码：${result.newUser.defaultPassword}\n\n` +
+            `导入统计：${result.stats.projects} 个项目，${result.stats.assets} 个资产，${result.stats.files} 个文件。\n\n` +
+            `请使用新账号登录查看导入的数据，并及时修改密码。`,
+            { type: 'success' }
+          );
+        } catch (error) {
+          console.error('Import failed:', error);
+          showAlert(`导入失败: ${error instanceof Error ? error.message : '未知错误'}`, { type: 'error' });
+        } finally {
+          setIsDataImporting(false);
         }
-      });
-    } catch (error) {
-      console.error('Import failed:', error);
-      showAlert(`导入失败: ${error instanceof Error ? error.message : '未知错误'}`, { type: 'error' });
-    }
+      }
+    });
   };
 
   return (
@@ -491,9 +473,9 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
               >
                 <div className="flex items-center gap-2 text-[var(--text-primary)] text-sm font-bold">
                   <Database className="w-4 h-4 text-[var(--accent-text)]" />
-                  导出数据
+                  {isDataExporting ? '导出中...' : '导出数据'}
                 </div>
-                <div className="text-[10px] text-[var(--text-tertiary)] font-mono mt-2">导出全部项目与资产库备份</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] font-mono mt-2">导出当前用户的数据库及媒体文件（ZIP）</div>
               </button>
 
               <button
@@ -503,9 +485,9 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
               >
                 <div className="flex items-center gap-2 text-[var(--text-primary)] text-sm font-bold">
                   <Database className="w-4 h-4 text-[var(--accent-text)]" />
-                  导入数据
+                  {isDataImporting ? '导入中...' : '导入数据'}
                 </div>
-                <div className="text-[10px] text-[var(--text-tertiary)] font-mono mt-2">导入全部项目与资产库备份</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] font-mono mt-2">导入 ZIP 备份，自动创建新用户</div>
               </button>
             </div>
           </div>
@@ -698,7 +680,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
       <input
         ref={importInputRef}
         type="file"
-        accept="application/json"
+        accept=".zip,application/zip"
         className="hidden"
         onChange={handleImportFileChange}
       />

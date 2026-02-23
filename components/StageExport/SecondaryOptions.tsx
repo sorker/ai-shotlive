@@ -53,7 +53,7 @@ const SecondaryOptions: React.FC<Props> = ({
         <Database className="w-5 h-5 text-[var(--text-muted)] group-hover:text-[var(--accent-text)] mb-4 transition-colors" />
         <div>
           <h4 className="text-sm font-bold text-[var(--text-primary)] mb-1">Export / Import</h4>
-          <p className="text-[10px] text-[var(--text-tertiary)]">Back up all IndexedDB data or import on another device.</p>
+          <p className="text-[10px] text-[var(--text-tertiary)]">Export database & media files as ZIP, or import backup to a new user.</p>
           <div className="mt-3 flex gap-2">
             <button
               type="button"
