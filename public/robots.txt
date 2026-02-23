@@ -1,4 +1,4 @@
-# BigBanana AI Director - Robots.txt
+# AI shotlive Director - Robots.txt
 # https://director.tree456.com/robots.txt
 
 User-agent: *

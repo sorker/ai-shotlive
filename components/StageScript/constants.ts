@@ -2,6 +2,22 @@
  * StageScript 配置常量
  */
 
+export const NOVEL_GENRE_OPTIONS = [
+  { label: '🗡️ 玄幻', value: '玄幻' },
+  { label: '🏙️ 都市', value: '都市' },
+  { label: '🔍 悬疑', value: '悬疑' },
+  { label: '💕 言情', value: '言情' },
+  { label: '⚔️ 武侠', value: '武侠' },
+  { label: '🚀 科幻', value: '科幻' },
+  { label: '👻 恐怖', value: '恐怖' },
+  { label: '📖 历史', value: '历史' },
+  { label: '🎭 喜剧', value: '喜剧' },
+  { label: '🎖️ 军事', value: '军事' },
+  { label: '🏫 校园', value: '校园' },
+  { label: '🎮 游戏', value: '游戏' },
+  { label: '✨ 其他', value: 'custom' },
+];
+
 export const DURATION_OPTIONS = [
   { label: '30秒 (广告)', value: '30s' },
   { label: '60秒 (预告)', value: '60s' },

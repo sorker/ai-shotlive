@@ -3,11 +3,11 @@
 # 使用方式: docker compose -f docker-compose.mysql.yaml up -d --build
 
 services:
-  bigbanana-ai:
+  ai-shotlive:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: bigbanana-ai-app
+    container_name: ai-shotlive-app
     ports:
       - "3001:3001"
     env_file:
@@ -28,7 +28,7 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: bigbanana-ai-mysql
+    container_name: ai-shotlive-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: ${DB_NAME:-banana}

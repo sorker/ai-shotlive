@@ -303,7 +303,7 @@ export const BUILTIN_CHAT_MODELS: ChatModelDefinition[] = [
   },
   // ========== Anthropic ==========
   // 注意：Anthropic 官方 API 使用 /v1/messages 格式，与 OpenAI 格式不同。
-  // 如直接使用 Anthropic 官方 Key，需通过兼容代理或使用 BigBanana API。
+  // 如直接使用 Anthropic 官方 Key，需通过兼容代理或使用 AiShotlive API。
   {
     id: 'claude-sonnet-4-5-20250929',
     name: 'Claude Sonnet 4.5',
@@ -496,7 +496,7 @@ export const BUILTIN_IMAGE_MODELS: ImageModelDefinition[] = [
     name: '可灵 Image O1',
     type: 'image',
     providerId: 'antsk',
-    description: '可灵 AI 图片生成模型（通过 BigBanana API 代理）',
+    description: '可灵 AI 图片生成模型（通过 AiShotlive API 代理）',
     isBuiltIn: true,
     isEnabled: true,
     params: { ...DEFAULT_IMAGE_PARAMS, supportedAspectRatios: ['16:9', '9:16', '1:1'] as AspectRatio[] },
@@ -549,7 +549,7 @@ export const BUILTIN_VIDEO_MODELS: VideoModelDefinition[] = [
     type: 'video',
     providerId: 'antsk',
     endpoint: '/v1/chat/completions',
-    description: 'Veo 3.1 首尾帧模式（通过 BigBanana API）',
+    description: 'Veo 3.1 首尾帧模式（通过 AiShotlive API）',
     isBuiltIn: true,
     isEnabled: true,
     params: { ...DEFAULT_VIDEO_PARAMS_VEO },
@@ -560,7 +560,7 @@ export const BUILTIN_VIDEO_MODELS: VideoModelDefinition[] = [
     type: 'video',
     providerId: 'antsk',
     endpoint: '/v1/videos',
-    description: '异步模式，支持横屏/竖屏（通过 BigBanana API）',
+    description: '异步模式，支持横屏/竖屏（通过 AiShotlive API）',
     isBuiltIn: true,
     isEnabled: true,
     params: { ...DEFAULT_VIDEO_PARAMS_VEO_FAST },
@@ -621,7 +621,7 @@ export const BUILTIN_VIDEO_MODELS: VideoModelDefinition[] = [
     type: 'video',
     providerId: 'antsk',
     endpoint: '/v1/videos',
-    description: '可灵 AI 最新视频模型（通过 BigBanana API）',
+    description: '可灵 AI 最新视频模型（通过 AiShotlive API）',
     isBuiltIn: true,
     isEnabled: true,
     params: {
@@ -639,7 +639,7 @@ export const BUILTIN_VIDEO_MODELS: VideoModelDefinition[] = [
     type: 'video',
     providerId: 'antsk',
     endpoint: '/v1/videos',
-    description: 'Vidu Q3 Pro 视频生成（通过 BigBanana API）',
+    description: 'Vidu Q3 Pro 视频生成（通过 AiShotlive API）',
     isBuiltIn: true,
     isEnabled: true,
     params: {
@@ -741,7 +741,7 @@ export const BUILTIN_VIDEO_MODELS: VideoModelDefinition[] = [
 export const BUILTIN_PROVIDERS: ModelProvider[] = [
   {
     id: 'antsk',
-    name: 'BigBanana API (api.antsk.cn)',
+    name: 'AiShotlive API (api.antsk.cn)',
     baseUrl: 'https://api.antsk.cn',
     apiKeyUrl: 'https://api.antsk.cn',
     isBuiltIn: true,

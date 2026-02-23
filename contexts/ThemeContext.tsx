@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const STORAGE_KEY = 'bigbanana_theme';
+const STORAGE_KEY = 'aishotlive_theme';
 
 export type Theme = 'dark' | 'light';
 
@@ -24,7 +24,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY, theme);
 
     // 异步同步到服务器（已登录时）
-    const token = localStorage.getItem('bigbanana_auth_token');
+    const token = localStorage.getItem('aishotlive_auth_token');
     if (token) {
       fetch('/api/preferences', {
         method: 'PUT',
@@ -34,7 +34,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({
           theme,
-          onboarding_completed: localStorage.getItem('bigbanana_onboarding_completed') === 'true',
+          onboarding_completed: localStorage.getItem('aishotlive_onboarding_completed') === 'true',
         }),
       }).catch(() => { /* 同步失败不影响使用 */ });
     }

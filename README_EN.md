@@ -1,4 +1,4 @@
-# BigBanana AI Director
+# AI shotlive Director
 
 > **AI-Powered End-to-End Short Drama & Motion Comic Platform**
 
@@ -7,9 +7,9 @@
 [![日本語](https://img.shields.io/badge/Language-日本語-gray.svg)](./README_JA.md)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-**BigBanana AI Director** is an **AI-powered, one-stop platform** for **short dramas** and **motion comics**, built for creators who want to go from idea to final video fast.
+**AI shotlive Director** is an **AI-powered, one-stop platform** for **short dramas** and **motion comics**, built for creators who want to go from idea to final video fast.
 
-Moving away from the traditional "slot machine" style of random generation, BigBanana adopts an industrial **"Script-to-Asset-to-Keyframe"** workflow. With deep integration of AntSK API’s advanced AI models, it enables **one-sentence to complete drama** — fully automated from **script** to **final video**, while maintaining precise control over character consistency, scene continuity, and camera movement.
+Moving away from the traditional "slot machine" style of random generation, AiShotlive adopts an industrial **"Script-to-Asset-to-Keyframe"** workflow. With deep integration of AntSK API’s advanced AI models, it enables **one-sentence to complete drama** — fully automated from **script** to **final video**, while maintaining precise control over character consistency, scene continuity, and camera movement.
 ## UI Showcase
 
 ### Project Management
@@ -36,7 +36,7 @@ Moving away from the traditional "slot machine" style of random generation, BigB
 ![Prompt Management](./images/提示词管理.png)
 ## Core Philosophy: Keyframe-Driven
 
-Traditional Text-to-Video models often struggle with specific camera movements and precise start/end states. BigBanana introduces the animation concept of **Keyframes**:
+Traditional Text-to-Video models often struggle with specific camera movements and precise start/end states. AiShotlive introduces the animation concept of **Keyframes**:
 
 1.  **Draw First, Move Later**: First, generate precise Start and End frames.
 2.  **Interpolation**: Use the Veo model to generate smooth video transitions between these two frames.
@@ -120,7 +120,7 @@ This project deeply integrates [**AntSK API Platform**](https://api.antsk.cn/), 
 
 ## 💬 Join Our Community
 
-Scan the QR code to join our **BigBanana Product Experience Group** on WeChat. Connect with fellow creators, share tips, and get the latest updates:
+Scan the QR code to join our **AiShotlive Product Experience Group** on WeChat. Connect with fellow creators, share tips, and get the latest updates:
 
 <div align="center">
 <img src="./images/qrcode.jpg" width="300" alt="WeChat Group QR Code">
@@ -133,13 +133,13 @@ Scan the QR code to join our **BigBanana Product Experience Group** on WeChat. C
 
 For **quick one-off creative tasks**, try our online tool platform:
 
-**[BigBanana Creation Studio](https://bigbanana.tree456.com/)** offers:
-* 📷 **[AI Image Generation](https://bigbanana.tree456.com/gemini-image.html)**: Text-to-image with multiple styles
-* 📊 **[AI PowerPoint](https://bigbanana.tree456.com/ppt-content.html)**: Generate presentations instantly
-* 🎬 **[AI Video](https://bigbanana.tree456.com/ai-video-content.html)**: Intelligent video content generation
-* 📱 **[Social Media Content](https://bigbanana.tree456.com/redink-content.html)**: Viral titles and posts for Xiaohongshu
-* 📖 **[AI Novel Creation](https://bigbanana.tree456.com/novel-creation.html)**: Intelligent novel generation and continuation
-* 🎨 **[AI Anime Generation](https://bigbanana.tree456.com/anime-content.html)**: Anime-style image creation
+**[AiShotlive Creation Studio](https://aishotlive.tree456.com/)** offers:
+* 📷 **[AI Image Generation](https://aishotlive.tree456.com/gemini-image.html)**: Text-to-image with multiple styles
+* 📊 **[AI PowerPoint](https://aishotlive.tree456.com/ppt-content.html)**: Generate presentations instantly
+* 🎬 **[AI Video](https://aishotlive.tree456.com/ai-video-content.html)**: Intelligent video content generation
+* 📱 **[Social Media Content](https://aishotlive.tree456.com/redink-content.html)**: Viral titles and posts for Xiaohongshu
+* 📖 **[AI Novel Creation](https://aishotlive.tree456.com/novel-creation.html)**: Intelligent novel generation and continuation
+* 🎨 **[AI Anime Generation](https://aishotlive.tree456.com/anime-content.html)**: Anime-style image creation
 * 🎭 **No Installation**: Use directly in browser, instant access
 
 **Best For**: Daily creation, rapid prototyping, idea validation  
@@ -149,7 +149,7 @@ For **quick one-off creative tasks**, try our online tool platform:
 
 Download the installer and get started right away — no development environment needed:
 
-**[📥 Download BigBanana AI Director Client (Windows)](https://tree456.oss-cn-beijing.aliyuncs.com/BigBanana%20AI%20Director%20Setup%201.0.0.exe?Expires=1770908400&OSSAccessKeyId=TMP.3KofXPaUNdnvbUpRP5MqiRmMMxuGwiftTgQfn7U3ntRtFvMYHpMB2kPb17r7rPXksvo7DFncrz4dWSfs3K33wVgGXfnCy4&Signature=wiOZbN%2BcZNuyZdiEI3KR1CqkFhM%3D)**
+**[📥 Download AI shotlive Director Client (Windows)](https://tree456.oss-cn-beijing.aliyuncs.com/AiShotlive%20AI%20Director%20Setup%201.0.0.exe?Expires=1770908400&OSSAccessKeyId=TMP.3KofXPaUNdnvbUpRP5MqiRmMMxuGwiftTgQfn7U3ntRtFvMYHpMB2kPb17r7rPXksvo7DFncrz4dWSfs3K33wVgGXfnCy4&Signature=wiOZbN%2BcZNuyZdiEI3KR1CqkFhM%3D)**
 
 > 💡 Just download and install — supports Windows.
 
@@ -161,8 +161,8 @@ Download the installer and get started right away — no development environment
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/shuyu-labs/BigBanana-AI-Director.git
-cd BigBanana-AI-Director
+git clone https://github.com/shuyu-labs/ai-shotlive-Director.git
+cd ai-shotlive-Director
 
 # 2. Install dependencies
 npm install
@@ -178,8 +178,8 @@ npm run dev
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/shuyu-labs/BigBanana-AI-Director.git
-cd BigBanana-AI-Director
+git clone https://github.com/shuyu-labs/ai-shotlive-Director.git
+cd ai-shotlive-Director
 
 # 2. Build and start with Docker Compose
 docker-compose up -d --build
@@ -198,23 +198,23 @@ docker-compose down
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/shuyu-labs/BigBanana-AI-Director.git
-cd BigBanana-AI-Director
+git clone https://github.com/shuyu-labs/ai-shotlive-Director.git
+cd ai-shotlive-Director
 
 # 2. Build image
-docker build -t bigbanana-ai .
+docker build -t ai-shotlive .
 
 # 3. Run container
-docker run -d -p 3005:80 --name bigbanana-ai-app bigbanana-ai
+docker run -d -p 3005:80 --name ai-shotlive-app ai-shotlive
 
 # 4. Open in browser
 # Visit http://localhost:3005
 
 # View logs
-docker logs -f bigbanana-ai-app
+docker logs -f ai-shotlive-app
 
 # Stop container
-docker stop bigbanana-ai-app
+docker stop ai-shotlive-app
 ```
 
 ### Other Commands
@@ -262,4 +262,4 @@ This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/lic
 For commercial licensing, please contact: antskpro@qq.com
 
 ---
-*Built for Creators, by BigBanana.*
+*Built for Creators, by AiShotlive.*

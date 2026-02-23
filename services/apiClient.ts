@@ -3,8 +3,8 @@
  * 自动附加 JWT Token，处理认证过期
  */
 
-const TOKEN_KEY = 'bigbanana_auth_token';
-const USER_KEY = 'bigbanana_auth_user';
+const TOKEN_KEY = 'aishotlive_auth_token';
+const USER_KEY = 'aishotlive_auth_user';
 
 // 认证过期回调（由 AuthContext 设置）
 let onAuthExpired: (() => void) | null = null;

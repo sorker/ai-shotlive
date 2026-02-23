@@ -287,6 +287,8 @@ export const initDatabase = async (): Promise<void> => {
     await addColumnIfNotExists(conn, 'projects', 'art_direction', 'JSON');
     await addColumnIfNotExists(conn, 'projects', 'created_at_ms', 'BIGINT');
     await addColumnIfNotExists(conn, 'projects', 'last_modified_ms', 'BIGINT');
+    await addColumnIfNotExists(conn, 'projects', 'novel_genre', "VARCHAR(100) DEFAULT '' COMMENT '小说类型'");
+    await addColumnIfNotExists(conn, 'projects', 'novel_synopsis', "TEXT COMMENT '小说简介'");
     await addColumnIfNotExists(conn, 'projects', 'is_normalized', "TINYINT(1) DEFAULT 0");
 
     // ========== 小说章节表 ==========

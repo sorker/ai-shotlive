@@ -78,6 +78,8 @@ interface ProjectState {
   createdAt: number;
   lastModified: number;
   stage: string;
+  novelGenre: string;
+  novelSynopsis: string;
   novelChapters: any[];
   novelEpisodes: any[];
   selectedEpisodeId: string | null;
@@ -159,15 +161,18 @@ export async function saveProjectNormalized(
   await conn.execute(
     `INSERT INTO projects (
        id, user_id, title, data,
-       stage, target_duration, language, visual_style, shot_generation_model,
+       stage, novel_genre, novel_synopsis,
+       target_duration, language, visual_style, shot_generation_model,
        raw_script, selected_episode_id, is_parsing_script,
        has_script_data, script_title, script_genre, script_logline, art_direction,
        created_at_ms, last_modified_ms, is_normalized
-     ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+     ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE
        title = VALUES(title),
        data = NULL,
        stage = VALUES(stage),
+       novel_genre = VALUES(novel_genre),
+       novel_synopsis = VALUES(novel_synopsis),
        target_duration = VALUES(target_duration),
        language = VALUES(language),
        visual_style = VALUES(visual_style),
@@ -187,6 +192,8 @@ export async function saveProjectNormalized(
     [
       pid, userId, project.title || '未命名项目',
       project.stage || 'script',
+      project.novelGenre || '',
+      project.novelSynopsis || '',
       project.targetDuration || '60s',
       project.language || '中文',
       project.visualStyle || 'live-action',
@@ -479,6 +486,8 @@ interface ProjectMetaRow extends RowDataPacket {
   title: string;
   data: string | null;
   stage: string;
+  novel_genre: string;
+  novel_synopsis: string;
   target_duration: string;
   language: string;
   visual_style: string;
@@ -820,6 +829,8 @@ export async function loadProjectNormalized(
     createdAt: meta.created_at_ms || new Date(meta.created_at).getTime(),
     lastModified: meta.last_modified_ms || new Date(meta.updated_at).getTime(),
     stage: (meta.stage || 'script') as any,
+    novelGenre: meta.novel_genre || '',
+    novelSynopsis: meta.novel_synopsis || '',
     novelChapters,
     novelEpisodes,
     selectedEpisodeId: meta.selected_episode_id || null,
@@ -842,7 +853,8 @@ export async function loadProjectList(
   userId: number
 ): Promise<any[]> {
   const [rows] = await pool.execute<ProjectMetaRow[]>(
-    `SELECT id, title, data, stage, target_duration, language, visual_style,
+    `SELECT id, title, data, stage, novel_genre, novel_synopsis,
+            target_duration, language, visual_style,
             shot_generation_model, created_at_ms, last_modified_ms, is_normalized,
             created_at, updated_at, is_parsing_script, has_script_data,
             selected_episode_id
@@ -867,6 +879,8 @@ export async function loadProjectList(
       createdAt: meta.created_at_ms || new Date(meta.created_at).getTime(),
       lastModified: meta.last_modified_ms || new Date(meta.updated_at).getTime(),
       stage: meta.stage || 'script',
+      novelGenre: meta.novel_genre || '',
+      novelSynopsis: meta.novel_synopsis || '',
       targetDuration: meta.target_duration || '60s',
       language: meta.language || '中文',
       visualStyle: meta.visual_style || 'live-action',

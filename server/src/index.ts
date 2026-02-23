@@ -75,7 +75,7 @@ const start = async () => {
   try {
     await initDatabase();
     app.listen(PORT, '0.0.0.0', async () => {
-      console.log(`🚀 BigBanana API Server 运行在 http://0.0.0.0:${PORT}`);
+      console.log(`🚀 AiShotlive API Server 运行在 http://0.0.0.0:${PORT}`);
       console.log(`📦 环境: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🗄️  数据库: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
 

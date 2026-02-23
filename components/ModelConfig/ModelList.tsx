@@ -51,7 +51,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   siliconflow: 'SiliconFlow',
   moonshot: 'Moonshot',
   openrouter: 'OpenRouter',
-  antsk: 'BigBanana',
+  antsk: 'AiShotlive',
 };
 
 function getModelVendorTag(model: ModelDefinition): string {

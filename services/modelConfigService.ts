@@ -15,12 +15,12 @@ import {
 } from '../types';
 
 // localStorage 键名
-const STORAGE_KEY = 'bigbanana_model_config';
+const STORAGE_KEY = 'aishotlive_model_config';
 
 // 默认提供商 - api.antsk.cn
 const DEFAULT_PROVIDER: ModelProvider = {
   id: 'antsk',
-  name: 'BigBanana API (api.antsk.cn)',
+  name: 'AiShotlive API (api.antsk.cn)',
   baseUrl: 'https://api.antsk.cn',
   isDefault: true,
   isBuiltIn: true

@@ -107,7 +107,7 @@ const ApiKeyPage: React.FC<ApiKeyPageProps> = ({
             setVerifyStatus('idle');
             setVerifyMessage('');
           }}
-          placeholder="输入你的 BigBanana API Key..."
+          placeholder="输入你的 AiShotlive API Key..."
           className="w-full bg-[var(--bg-surface)] border border-[var(--border-primary)] text-[var(--text-primary)] px-4 py-3 text-sm rounded-lg focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-hover)] transition-all font-mono placeholder:text-[var(--text-muted)] text-center"
           disabled={isVerifying}
           onKeyDown={(e) => {

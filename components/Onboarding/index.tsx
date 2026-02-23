@@ -53,7 +53,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onQuickStart }) => 
     localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
 
     // 异步同步到服务器
-    const token = localStorage.getItem('bigbanana_auth_token');
+    const token = localStorage.getItem('aishotlive_auth_token');
     if (token) {
       fetch('/api/preferences', {
         method: 'PUT',
@@ -62,7 +62,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onQuickStart }) => 
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          theme: localStorage.getItem('bigbanana_theme') || 'dark',
+          theme: localStorage.getItem('aishotlive_theme') || 'dark',
           onboarding_completed: true,
         }),
       }).catch(() => {});

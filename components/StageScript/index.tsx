@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ProjectState, Shot } from '../../types';
 import { useAlert } from '../GlobalAlert';
 import { parseScriptToData, generateShotList, continueScript, continueScriptStream, rewriteScript, rewriteScriptStream, setScriptLogCallback, clearScriptLogCallback, logScriptProgress } from '../../services/aiService';
@@ -31,6 +31,8 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
   // Configuration state
   const [localScript, setLocalScript] = useState(project.rawScript);
   const [localTitle, setLocalTitle] = useState(project.title);
+  const [localNovelGenre, setLocalNovelGenre] = useState(project.novelGenre || '');
+  const [localNovelSynopsis, setLocalNovelSynopsis] = useState(project.novelSynopsis || '');
   const [localDuration, setLocalDuration] = useState(project.targetDuration || DEFAULTS.duration);
   const [localLanguage, setLocalLanguage] = useState(project.language || DEFAULTS.language);
   const [localModel, setLocalModel] = useState(project.shotGenerationModel || DEFAULTS.model);
@@ -38,6 +40,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
   const [customDurationInput, setCustomDurationInput] = useState('');
   const [customModelInput, setCustomModelInput] = useState('');
   const [customStyleInput, setCustomStyleInput] = useState('');
+  const [customGenreInput, setCustomGenreInput] = useState('');
   
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -60,6 +63,8 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
   useEffect(() => {
     setLocalScript(project.rawScript);
     setLocalTitle(project.title);
+    setLocalNovelGenre(project.novelGenre || '');
+    setLocalNovelSynopsis(project.novelSynopsis || '');
     setLocalDuration(project.targetDuration || DEFAULTS.duration);
     setLocalLanguage(project.language || DEFAULTS.language);
     setLocalModel(project.shotGenerationModel || DEFAULTS.model);
@@ -78,6 +83,42 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
       onGeneratingChange?.(false);
     };
   }, []);
+
+  // 小说管理字段的自动保存（debounced）
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMount = useRef(true);
+
+  const debouncedSaveProjectInfo = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const finalGenre = localNovelGenre === 'custom' ? customGenreInput : localNovelGenre;
+      const finalStyle = localVisualStyle === 'custom' ? customStyleInput : localVisualStyle;
+      const updates: Partial<ProjectState> = {
+        title: localTitle,
+        novelGenre: finalGenre,
+        novelSynopsis: localNovelSynopsis,
+        language: localLanguage,
+        visualStyle: finalStyle,
+      };
+      updateProject(updates);
+      PS.patchProject(project.id, {
+        title: localTitle,
+        novelGenre: finalGenre,
+        novelSynopsis: localNovelSynopsis,
+        language: localLanguage,
+        visualStyle: finalStyle,
+      });
+    }, 600);
+  }, [localTitle, localNovelGenre, localNovelSynopsis, localLanguage, localVisualStyle, customGenreInput, customStyleInput, project.id, updateProject]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    debouncedSaveProjectInfo();
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [localTitle, localNovelGenre, localNovelSynopsis, localLanguage, localVisualStyle, customGenreInput, customStyleInput]);
 
   useEffect(() => {
     setScriptLogCallback((message) => {
@@ -119,8 +160,11 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     setProcessingLogs([]);
     setError(null);
     try {
+      const finalGenre = localNovelGenre === 'custom' ? customGenreInput : localNovelGenre;
       updateProject({
         title: localTitle,
+        novelGenre: finalGenre,
+        novelSynopsis: localNovelSynopsis,
         rawScript: localScript,
         targetDuration: finalDuration,
         language: localLanguage,
@@ -663,6 +707,20 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
           <NovelManager
             project={project}
             updateProject={updateProject}
+            title={localTitle}
+            novelGenre={localNovelGenre}
+            novelSynopsis={localNovelSynopsis}
+            language={localLanguage}
+            visualStyle={localVisualStyle}
+            customGenreInput={customGenreInput}
+            customStyleInput={customStyleInput}
+            onTitleChange={setLocalTitle}
+            onNovelGenreChange={setLocalNovelGenre}
+            onNovelSynopsisChange={setLocalNovelSynopsis}
+            onLanguageChange={setLocalLanguage}
+            onVisualStyleChange={setLocalVisualStyle}
+            onCustomGenreChange={setCustomGenreInput}
+            onCustomStyleChange={setCustomStyleInput}
           />
         )}
 
@@ -693,25 +751,17 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         {activeTab === 'story' && (project.selectedEpisodeId || !(project.novelEpisodes?.length > 0)) && (
           <div className="flex h-full bg-[var(--bg-base)] text-[var(--text-secondary)]">
             <ConfigPanel
-              title={localTitle}
               duration={localDuration}
-              language={localLanguage}
               model={localModel}
-              visualStyle={localVisualStyle}
               customDurationInput={customDurationInput}
               customModelInput={customModelInput}
-              customStyleInput={customStyleInput}
               isProcessing={isProcessing}
               error={error}
               onShowModelConfig={onShowModelConfig}
-              onTitleChange={setLocalTitle}
               onDurationChange={setLocalDuration}
-              onLanguageChange={setLocalLanguage}
               onModelChange={setLocalModel}
-              onVisualStyleChange={setLocalVisualStyle}
               onCustomDurationChange={setCustomDurationInput}
               onCustomModelChange={setCustomModelInput}
-              onCustomStyleChange={setCustomStyleInput}
               onAnalyze={handleAnalyze}
             />
             <ScriptEditor

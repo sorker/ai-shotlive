@@ -283,7 +283,7 @@ function App() {
       <div className="h-screen bg-[var(--bg-base)] flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-6">
           <img src={logoImg} alt="Logo" className="w-20 h-20 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">BigBanana AI Director</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">AI shotlive Director</h1>
           <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-8">
             <p className="text-[var(--text-tertiary)] text-base leading-relaxed mb-4">
               为了获得最佳体验，请使用 PC 端浏览器访问。

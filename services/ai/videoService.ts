@@ -149,7 +149,7 @@ const generateVideoAsync = async (
       throw new Error(
         `无法连接到 ${apiBase}（浏览器跨域限制）。` +
         `该提供商的 API 不支持浏览器直接调用。` +
-        `请在模型配置中将该模型的提供商切换为支持浏览器调用的代理服务（如 BigBanana API）。`
+        `请在模型配置中将该模型的提供商切换为支持浏览器调用的代理服务（如 AiShotlive API）。`
       );
     }
     throw fetchError;
@@ -369,7 +369,7 @@ export const generateVideo = async (
   }
 
   // 火山引擎 (豆包 Seedance) → 使用原生 Volcengine 适配器
-  // 仅当直连火山引擎时使用（通过 BigBanana 代理时仍走通用逻辑）
+  // 仅当直连火山引擎时使用（通过 AiShotlive 代理时仍走通用逻辑）
   if (
     providerId === 'doubao' &&
     providerBaseUrl.includes('ark.cn-beijing.volces.com') &&
@@ -388,7 +388,7 @@ export const generateVideo = async (
   }
 
   // ========================================
-  // 通用模式（BigBanana 代理、OpenAI 兼容等）
+  // 通用模式（AiShotlive 代理、OpenAI 兼容等）
   // ========================================
   const isAsyncMode =
     (resolvedVideoModel?.params as any)?.mode === 'async' ||

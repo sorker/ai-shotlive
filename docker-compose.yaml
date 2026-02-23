@@ -4,11 +4,11 @@
 # 使用 MySQL 容器请用: docker compose -f docker-compose.mysql.yaml up -d --build
 
 services:
-  bigbanana-ai:
+  ai-shotlive:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: bigbanana-ai-app
+    container_name: ai-shotlive-app
     ports:
       - "3001:3001"
     env_file:

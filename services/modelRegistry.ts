@@ -20,7 +20,7 @@ import {
 } from '../types/model';
 
 // localStorage 键名
-const STORAGE_KEY = 'bigbanana_model_registry';
+const STORAGE_KEY = 'aishotlive_model_registry';
 
 // 规范化 URL（去尾部斜杠、转小写）用于去重
 const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, '').toLowerCase();
@@ -213,7 +213,7 @@ export const saveRegistry = (state: ModelRegistryState): void => {
  */
 const syncRegistryToServer = async (state: ModelRegistryState): Promise<void> => {
   try {
-    const token = localStorage.getItem('bigbanana_auth_token');
+    const token = localStorage.getItem('aishotlive_auth_token');
     if (!token) return; // 未登录时不同步
 
     await fetch('/api/models/registry', {
@@ -234,7 +234,7 @@ const syncRegistryToServer = async (state: ModelRegistryState): Promise<void> =>
  */
 export const syncRegistryFromServer = async (): Promise<void> => {
   try {
-    const token = localStorage.getItem('bigbanana_auth_token');
+    const token = localStorage.getItem('aishotlive_auth_token');
     if (!token) return;
 
     const res = await fetch('/api/models/registry', {

@@ -331,7 +331,7 @@ router.post('/export', async (req: AuthRequest, res: Response) => {
       schemaVersion: 1,
       exportedAt: Date.now(),
       scope: 'all',
-      dbName: 'BigBananaDB',
+      dbName: 'AiShotliveDB',
       dbVersion: 2,
       stores: {
         projects,

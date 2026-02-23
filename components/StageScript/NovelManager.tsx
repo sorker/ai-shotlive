@@ -2,17 +2,40 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ProjectState, NovelChapter } from '../../types';
 import { readFileAsText, parseNovelToChapters } from '../../services/novelParser';
 import { fetchChaptersPaginated, fetchChapterContent } from '../../services/storageService';
-import { Upload, BookOpen, Trash2, ChevronDown, ChevronRight, FileText, AlertCircle, CheckCircle2, X, ChevronLeft, Loader2 } from 'lucide-react';
+import { Upload, BookOpen, Trash2, ChevronDown, ChevronRight, FileText, AlertCircle, CheckCircle2, X, ChevronLeft, Loader2, Wand2, Settings2 } from 'lucide-react';
 import * as PS from '../../services/projectPatchService';
+import OptionSelector from './OptionSelector';
+import { NOVEL_GENRE_OPTIONS, LANGUAGE_OPTIONS, VISUAL_STYLE_OPTIONS, STYLES } from './constants';
 
 const PAGE_SIZE = 10;
 
 interface Props {
   project: ProjectState;
   updateProject: (updates: Partial<ProjectState> | ((prev: ProjectState) => ProjectState)) => void;
+  title: string;
+  novelGenre: string;
+  novelSynopsis: string;
+  language: string;
+  visualStyle: string;
+  customGenreInput: string;
+  customStyleInput: string;
+  onTitleChange: (value: string) => void;
+  onNovelGenreChange: (value: string) => void;
+  onNovelSynopsisChange: (value: string) => void;
+  onLanguageChange: (value: string) => void;
+  onVisualStyleChange: (value: string) => void;
+  onCustomGenreChange: (value: string) => void;
+  onCustomStyleChange: (value: string) => void;
 }
 
-const NovelManager: React.FC<Props> = ({ project, updateProject }) => {
+const NovelManager: React.FC<Props> = ({
+  project, updateProject,
+  title, novelGenre, novelSynopsis, language, visualStyle,
+  customGenreInput, customStyleInput,
+  onTitleChange, onNovelGenreChange, onNovelSynopsisChange,
+  onLanguageChange, onVisualStyleChange,
+  onCustomGenreChange, onCustomStyleChange,
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -214,272 +237,373 @@ const NovelManager: React.FC<Props> = ({ project, updateProject }) => {
   }, {});
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 头部：上传区域 */}
-      <div className="flex-shrink-0 p-6 border-b border-[var(--border-primary)]">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              小说管理
-            </h3>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              上传小说文件，系统自动解析章节结构
-            </p>
+    <div className="h-full flex bg-[var(--bg-base)] text-[var(--text-secondary)]">
+      {/* 左侧：项目配置面板 */}
+      <div className="w-96 border-r border-[var(--border-primary)] flex flex-col bg-[var(--bg-primary)]">
+        {/* Header */}
+        <div className="h-14 px-5 border-b border-[var(--border-primary)] flex items-center shrink-0">
+          <h2 className="text-sm font-bold text-[var(--text-primary)] tracking-wide flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-[var(--text-tertiary)]" />
+            项目配置
+          </h2>
+        </div>
+
+        {/* Config Form */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+          {/* 标题 */}
+          <div className="space-y-2">
+            <label className={STYLES.label}>项目标题</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              className={STYLES.input}
+              placeholder="输入项目名称..."
+            />
           </div>
-          {totalChapters > 0 && (
-            <div className="text-xs text-[var(--text-tertiary)] font-mono">
-              {totalChapters} 章 · {totalWords.toLocaleString()} 字
+
+          {/* 小说类型 */}
+          <div className="space-y-2">
+            <label className={STYLES.label}>小说类型</label>
+            <div className="relative">
+              <select
+                value={NOVEL_GENRE_OPTIONS.some(o => o.value === novelGenre) ? novelGenre : 'custom'}
+                onChange={(e) => onNovelGenreChange(e.target.value)}
+                className={STYLES.select}
+              >
+                {NOVEL_GENRE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-3 pointer-events-none">
+                <ChevronRight className="w-4 h-4 text-[var(--text-muted)] rotate-90" />
+              </div>
+            </div>
+            {novelGenre === 'custom' && (
+              <input
+                type="text"
+                value={customGenreInput}
+                onChange={(e) => onCustomGenreChange(e.target.value)}
+                className={STYLES.input}
+                placeholder="输入自定义类型..."
+              />
+            )}
+          </div>
+
+          {/* 输出语言 */}
+          <div className="space-y-2">
+            <label className={STYLES.label}>输出语言</label>
+            <div className="relative">
+              <select
+                value={language}
+                onChange={(e) => onLanguageChange(e.target.value)}
+                className={STYLES.select}
+              >
+                {LANGUAGE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-3 pointer-events-none">
+                <ChevronRight className="w-4 h-4 text-[var(--text-muted)] rotate-90" />
+              </div>
+            </div>
+          </div>
+
+          {/* 小说简介 */}
+          <div className="space-y-2">
+            <label className={STYLES.label}>小说简介</label>
+            <textarea
+              value={novelSynopsis}
+              onChange={(e) => onNovelSynopsisChange(e.target.value)}
+              className={`${STYLES.input} resize-none`}
+              rows={4}
+              placeholder="输入小说的故事梗概或简介..."
+            />
+          </div>
+
+          {/* 视觉风格 */}
+          <OptionSelector
+            label="视觉风格"
+            icon={<Wand2 className="w-3 h-3" />}
+            options={VISUAL_STYLE_OPTIONS}
+            value={visualStyle}
+            onChange={onVisualStyleChange}
+            customInput={customStyleInput}
+            onCustomInputChange={onCustomStyleChange}
+            customPlaceholder="输入风格 (如: 水彩风格, 像素艺术)"
+            gridCols={2}
+          />
+        </div>
+      </div>
+
+      {/* 右侧：小说章节管理 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 头部：上传区域 */}
+        <div className="flex-shrink-0 p-6 border-b border-[var(--border-primary)]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                小说章节
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                上传小说文件，系统自动解析章节结构
+              </p>
+            </div>
+            {totalChapters > 0 && (
+              <div className="text-xs text-[var(--text-tertiary)] font-mono">
+                {totalChapters} 章 · {totalWords.toLocaleString()} 字
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-lg transition-all
+                bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)]
+                disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUploading ? (
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <Upload className="w-3.5 h-3.5" />
+              )}
+              {isUploading ? '解析中...' : '上传小说文件'}
+            </button>
+
+            {totalChapters > 0 && (
+              <button
+                onClick={handleDeleteAllChapters}
+                className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium rounded-lg transition-all
+                  text-[var(--error-text)] bg-[var(--error-bg)] border border-[var(--error-border)]
+                  hover:bg-[var(--error-hover-bg)]"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                清空全部
+              </button>
+            )}
+          </div>
+
+          <p className="text-[10px] text-[var(--text-muted)] mt-2">
+            支持 .txt 格式（UTF-8 编码），最大 10MB。需包含"第X章"格式的章节标题。
+          </p>
+
+          {uploadError && (
+            <div className="mt-3 flex items-start gap-2 text-xs text-[var(--error-text)] bg-[var(--error-bg)] border border-[var(--error-border)] rounded-lg px-3 py-2">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span>{uploadError}</span>
+              <button onClick={() => setUploadError(null)} className="ml-auto flex-shrink-0">
+                <X className="w-3 h-3" />
+              </button>
             </div>
           )}
         </div>
 
-        <div className="flex gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-lg transition-all
-              bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)]
-              disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isUploading ? (
-              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : (
-              <Upload className="w-3.5 h-3.5" />
-            )}
-            {isUploading ? '解析中...' : '上传小说文件'}
-          </button>
+        {/* 章节列表 */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoadingPage ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <Loader2 className="w-8 h-8 text-[var(--text-muted)] animate-spin mb-4" />
+              <p className="text-xs text-[var(--text-muted)]">加载章节列表...</p>
+            </div>
+          ) : paginatedChapters.length === 0 && totalChapters === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <FileText className="w-12 h-12 text-[var(--text-muted)] mb-4 opacity-30" />
+              <p className="text-sm text-[var(--text-tertiary)] mb-1">暂无小说内容</p>
+              <p className="text-xs text-[var(--text-muted)]">上传小说文件后，章节将在此处显示</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-[var(--border-subtle)]">
+              {Object.entries(reelGroups).map(([reelName, reelChapters]) => (
+                <div key={reelName}>
+                  {Object.keys(reelGroups).length > 1 && (
+                    <div className="px-6 py-2 bg-[var(--bg-sunken)] text-[10px] text-[var(--text-muted)] uppercase tracking-widest font-mono">
+                      {reelName}
+                    </div>
+                  )}
+                  {Array.isArray(reelChapters) && reelChapters.map((chapter) => {
+                    const isExpanded = expandedChapterId === chapter.id;
+                    const isEditing = editingChapterId === chapter.id;
+                    const wordCount = chapter.wordCount || chapter.content?.length || 0;
+                    const hasEpisode = (project.novelEpisodes || []).some(ep =>
+                      ep.chapterIds.includes(chapter.id) && ep.status === 'completed'
+                    );
+                    const cachedContent = contentCache.get(chapter.id);
+                    const isLoadingContent = loadingContentId === chapter.id;
 
-          {totalChapters > 0 && (
-            <button
-              onClick={handleDeleteAllChapters}
-              className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium rounded-lg transition-all
-                text-[var(--error-text)] bg-[var(--error-bg)] border border-[var(--error-border)]
-                hover:bg-[var(--error-hover-bg)]"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              清空全部
-            </button>
-          )}
-        </div>
+                    return (
+                      <div key={chapter.id} className="group">
+                        {/* 章节行 */}
+                        <div
+                          className="flex items-center gap-3 px-6 py-3 hover:bg-[var(--bg-hover)] cursor-pointer transition-colors"
+                          onClick={() => handleToggleChapter(chapter.id)}
+                        >
+                          <div className="flex-shrink-0 text-[var(--text-muted)]">
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
+                          </div>
 
-        <p className="text-[10px] text-[var(--text-muted)] mt-2">
-          支持 .txt 格式（UTF-8 编码），最大 10MB。需包含"第X章"格式的章节标题。
-        </p>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-[var(--text-tertiary)]">
+                                第{chapter.index}章
+                              </span>
+                              {chapter.title && (
+                                <span className="text-xs text-[var(--text-secondary)] truncate">
+                                  {chapter.title}
+                                </span>
+                              )}
+                            </div>
+                          </div>
 
-        {uploadError && (
-          <div className="mt-3 flex items-start gap-2 text-xs text-[var(--error-text)] bg-[var(--error-bg)] border border-[var(--error-border)] rounded-lg px-3 py-2">
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-            <span>{uploadError}</span>
-            <button onClick={() => setUploadError(null)} className="ml-auto flex-shrink-0">
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 章节列表 */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoadingPage ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <Loader2 className="w-8 h-8 text-[var(--text-muted)] animate-spin mb-4" />
-            <p className="text-xs text-[var(--text-muted)]">加载章节列表...</p>
-          </div>
-        ) : paginatedChapters.length === 0 && totalChapters === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <FileText className="w-12 h-12 text-[var(--text-muted)] mb-4 opacity-30" />
-            <p className="text-sm text-[var(--text-tertiary)] mb-1">暂无小说内容</p>
-            <p className="text-xs text-[var(--text-muted)]">上传小说文件后，章节将在此处显示</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-[var(--border-subtle)]">
-            {Object.entries(reelGroups).map(([reelName, reelChapters]) => (
-              <div key={reelName}>
-                {Object.keys(reelGroups).length > 1 && (
-                  <div className="px-6 py-2 bg-[var(--bg-sunken)] text-[10px] text-[var(--text-muted)] uppercase tracking-widest font-mono">
-                    {reelName}
-                  </div>
-                )}
-                {Array.isArray(reelChapters) && reelChapters.map((chapter) => {
-                  const isExpanded = expandedChapterId === chapter.id;
-                  const isEditing = editingChapterId === chapter.id;
-                  const wordCount = chapter.wordCount || chapter.content?.length || 0;
-                  const hasEpisode = (project.novelEpisodes || []).some(ep =>
-                    ep.chapterIds.includes(chapter.id) && ep.status === 'completed'
-                  );
-                  const cachedContent = contentCache.get(chapter.id);
-                  const isLoadingContent = loadingContentId === chapter.id;
-
-                  return (
-                    <div key={chapter.id} className="group">
-                      {/* 章节行 */}
-                      <div
-                        className="flex items-center gap-3 px-6 py-3 hover:bg-[var(--bg-hover)] cursor-pointer transition-colors"
-                        onClick={() => handleToggleChapter(chapter.id)}
-                      >
-                        <div className="flex-shrink-0 text-[var(--text-muted)]">
-                          {isExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-[var(--text-tertiary)]">
-                              第{chapter.index}章
-                            </span>
-                            {chapter.title && (
-                              <span className="text-xs text-[var(--text-secondary)] truncate">
-                                {chapter.title}
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {hasEpisode && (
+                              <span className="flex items-center gap-1 text-[10px] text-[var(--success-text)]">
+                                <CheckCircle2 className="w-3 h-3" />
+                                已生成剧本
                               </span>
                             )}
+                            <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                              {wordCount.toLocaleString()} 字
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteChapter(chapter.id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--error-text)] hover:bg-[var(--error-bg)] transition-all"
+                              title="删除此章节"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          {hasEpisode && (
-                            <span className="flex items-center gap-1 text-[10px] text-[var(--success-text)]">
-                              <CheckCircle2 className="w-3 h-3" />
-                              已生成剧本
-                            </span>
-                          )}
-                          <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                            {wordCount.toLocaleString()} 字
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteChapter(chapter.id);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--error-text)] hover:bg-[var(--error-bg)] transition-all"
-                            title="删除此章节"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
+                        {/* 展开内容（按需加载） */}
+                        {isExpanded && (
+                          <div className="px-6 pb-4 pl-12">
+                            {isLoadingContent ? (
+                              <div className="flex items-center gap-2 py-4 text-xs text-[var(--text-muted)]">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                加载章节内容...
+                              </div>
+                            ) : isEditing ? (
+                              <div>
+                                <textarea
+                                  value={editingContent}
+                                  onChange={(e) => setEditingContent(e.target.value)}
+                                  className="w-full h-64 p-3 text-xs text-[var(--text-secondary)] bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg resize-y focus:outline-none focus:border-[var(--accent)]"
+                                />
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => handleSaveEdit(chapter.id)}
+                                    className="px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
+                                  >
+                                    保存
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    className="px-3 py-1.5 text-[10px] font-medium rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                                  >
+                                    取消
+                                  </button>
+                                </div>
+                              </div>
+                            ) : cachedContent ? (
+                              <div>
+                                <div className="text-xs text-[var(--text-tertiary)] leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-primary)] rounded-lg p-3 border border-[var(--border-subtle)]">
+                                  {cachedContent.slice(0, 2000)}
+                                  {cachedContent.length > 2000 && (
+                                    <span className="text-[var(--text-muted)]">
+                                      ...（共 {cachedContent.length.toLocaleString()} 字）
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleStartEdit(chapter)}
+                                  className="mt-2 text-[10px] text-[var(--accent-text)] hover:text-[var(--accent-text-hover)] transition-colors"
+                                >
+                                  编辑内容
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-[var(--text-muted)] py-2">
+                                无法加载内容
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-                      {/* 展开内容（按需加载） */}
-                      {isExpanded && (
-                        <div className="px-6 pb-4 pl-12">
-                          {isLoadingContent ? (
-                            <div className="flex items-center gap-2 py-4 text-xs text-[var(--text-muted)]">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              加载章节内容...
-                            </div>
-                          ) : isEditing ? (
-                            <div>
-                              <textarea
-                                value={editingContent}
-                                onChange={(e) => setEditingContent(e.target.value)}
-                                className="w-full h-64 p-3 text-xs text-[var(--text-secondary)] bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg resize-y focus:outline-none focus:border-[var(--accent)]"
-                              />
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  onClick={() => handleSaveEdit(chapter.id)}
-                                  className="px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
-                                >
-                                  保存
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="px-3 py-1.5 text-[10px] font-medium rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-                                >
-                                  取消
-                                </button>
-                              </div>
-                            </div>
-                          ) : cachedContent ? (
-                            <div>
-                              <div className="text-xs text-[var(--text-tertiary)] leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap bg-[var(--bg-primary)] rounded-lg p-3 border border-[var(--border-subtle)]">
-                                {cachedContent.slice(0, 2000)}
-                                {cachedContent.length > 2000 && (
-                                  <span className="text-[var(--text-muted)]">
-                                    ...（共 {cachedContent.length.toLocaleString()} 字）
-                                  </span>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => handleStartEdit(chapter)}
-                                className="mt-2 text-[10px] text-[var(--accent-text)] hover:text-[var(--accent-text-hover)] transition-colors"
-                              >
-                                编辑内容
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="text-xs text-[var(--text-muted)] py-2">
-                              无法加载内容
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+        {/* 分页控件 */}
+        {totalPages > 1 && (
+          <div className="flex-shrink-0 border-t border-[var(--border-primary)] px-6 py-3 flex items-center justify-between">
+            <div className="text-[10px] text-[var(--text-muted)] font-mono">
+              共 {totalChapters} 章 · 第 {currentPage}/{totalPages} 页
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`w-7 h-7 rounded-md text-[10px] font-mono transition-colors
+                      ${pageNum === currentPage
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+                className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
-
-      {/* 分页控件 */}
-      {totalPages > 1 && (
-        <div className="flex-shrink-0 border-t border-[var(--border-primary)] px-6 py-3 flex items-center justify-between">
-          <div className="text-[10px] text-[var(--text-muted)] font-mono">
-            共 {totalChapters} 章 · 第 {currentPage}/{totalPages} 页
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage <= 1}
-              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum: number;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => handlePageChange(pageNum)}
-                  className={`w-7 h-7 rounded-md text-[10px] font-mono transition-colors
-                    ${pageNum === currentPage
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-                    }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages}
-              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

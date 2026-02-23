@@ -251,6 +251,8 @@ export interface ProjectState {
   stage: 'script' | 'assets' | 'director' | 'export' | 'prompts';
   
   // Novel Phase Data（小说管理）
+  novelGenre: string;                  // 小说类型（如 玄幻、都市、悬疑 等）
+  novelSynopsis: string;               // 小说简介
   novelChapters: NovelChapter[];       // 上传的小说章节列表
   novelEpisodes: NovelEpisode[];       // 从小说章节生成的剧集剧本列表
   selectedEpisodeId: string | null;    // 当前选中用于分镜生成的剧集 ID

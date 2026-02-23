@@ -41,13 +41,13 @@ const syncPreferencesFromServer = async () => {
   try {
     const prefs = await apiGet<{ theme: string; onboarding_completed: boolean }>('/api/preferences');
     if (prefs.theme) {
-      localStorage.setItem('bigbanana_theme', prefs.theme);
+      localStorage.setItem('aishotlive_theme', prefs.theme);
       document.documentElement.setAttribute('data-theme', prefs.theme);
     }
     if (prefs.onboarding_completed) {
-      localStorage.setItem('bigbanana_onboarding_completed', 'true');
+      localStorage.setItem('aishotlive_onboarding_completed', 'true');
     } else {
-      localStorage.removeItem('bigbanana_onboarding_completed');
+      localStorage.removeItem('aishotlive_onboarding_completed');
     }
   } catch {
     // 同步失败使用本地默认值
@@ -59,8 +59,8 @@ const syncPreferencesFromServer = async () => {
  */
 const syncPreferencesToServer = async () => {
   try {
-    const theme = localStorage.getItem('bigbanana_theme') || 'dark';
-    const onboardingCompleted = localStorage.getItem('bigbanana_onboarding_completed') === 'true';
+    const theme = localStorage.getItem('aishotlive_theme') || 'dark';
+    const onboardingCompleted = localStorage.getItem('aishotlive_onboarding_completed') === 'true';
     await apiPut('/api/preferences', {
       theme,
       onboarding_completed: onboardingCompleted,
@@ -80,8 +80,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     clearAuth();
     // 清除用户级别的 localStorage 缓存
-    localStorage.removeItem('bigbanana_model_registry');
-    localStorage.removeItem('bigbanana_onboarding_completed');
+    localStorage.removeItem('aishotlive_model_registry');
+    localStorage.removeItem('aishotlive_onboarding_completed');
     setUser(null);
   }, []);
 
@@ -137,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 同步模型注册表
       const registry = await apiGet('/api/models/registry');
       if (registry) {
-        localStorage.setItem('bigbanana_model_registry', JSON.stringify(registry));
+        localStorage.setItem('aishotlive_model_registry', JSON.stringify(registry));
       }
       // 同步用户偏好（主题、引导状态）
       await syncPreferencesFromServer();

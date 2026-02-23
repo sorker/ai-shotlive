@@ -423,11 +423,11 @@ const GlobalSettings: React.FC<GlobalSettingsProps> = ({ onRefresh }) => {
           <div className="flex-1">
             <h3 className="text-base font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[var(--warning-text)]" />
-              推荐使用 BigBanana API
+              推荐使用 AiShotlive API
             </h3>
             <p className="text-xs text-[var(--text-tertiary)] mb-3 leading-relaxed">
               支持 GPT-5.1、GPT-5.2、Claude Sonnet 4.5、Gemini-3、Veo 3.1、Sora-2 等多种模型。
-              稳定快速，价格优惠。本开源项目由 BigBanana API 提供支持。
+              稳定快速，价格优惠。本开源项目由 AiShotlive API 提供支持。
             </p>
             <div className="flex items-center gap-3">
               <a 

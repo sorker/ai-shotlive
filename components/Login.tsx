@@ -61,7 +61,7 @@ const Login: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-3xl font-light text-[var(--text-primary)] tracking-tight mb-2">
-            BigBanana AI Director
+            AI shotlive Director
           </h1>
           <p className="text-xs text-[var(--text-muted)] font-mono uppercase tracking-[0.2em]">
             AI 漫剧生成平台
@@ -178,7 +178,7 @@ const Login: React.FC = () => {
 
         {/* Footer */}
         <div className="mt-6 text-center text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-widest">
-          Powered by BigBanana AI
+          Powered by AI shotlive
         </div>
       </div>
     </div>

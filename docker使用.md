@@ -17,19 +17,19 @@ docker-compose down
 方式二:使用 Docker 命令
 
 # 构建镜像
-docker build -t bigbanana-ai .
+docker build -t ai-shotlive .
 
 # 无缓存构建（强制重新拉取/执行每一层）
-docker build --no-cache -t bigbanana-ai .
+docker build --no-cache -t ai-shotlive .
 
 # 运行容器
-docker run -d -p 3005:80 --name bigbanana-ai-app bigbanana-ai
+docker run -d -p 3005:80 --name ai-shotlive-app ai-shotlive
 
 # 查看日志
-docker logs -f bigbanana-ai-app
+docker logs -f ai-shotlive-app
 
 # 停止容器
-docker stop bigbanana-ai-app
+docker stop ai-shotlive-app
 
 补充：如果你确认容器已更新但页面仍是旧的
 

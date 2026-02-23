@@ -95,7 +95,7 @@ export const exportProjectData = async (project: ProjectState): Promise<IndexedD
     schemaVersion: EXPORT_SCHEMA_VERSION,
     exportedAt: Date.now(),
     scope: 'project',
-    dbName: 'BigBananaDB',
+    dbName: 'AiShotliveDB',
     dbVersion: 2,
     stores: {
       projects: [project],
@@ -287,6 +287,8 @@ export const createNewProjectState = (): ProjectState => {
     createdAt: Date.now(),
     lastModified: Date.now(),
     stage: 'script',
+    novelGenre: '',
+    novelSynopsis: '',
     targetDuration: '60s',
     language: '中文',
     visualStyle: 'live-action',

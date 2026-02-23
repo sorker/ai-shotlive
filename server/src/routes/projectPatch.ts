@@ -78,6 +78,8 @@ function buildPatchSets(body: Record<string, any>, fieldMap: FieldMap): { sets: 
 const PROJECT_FIELDS: FieldMap = {
   title: 'title',
   stage: 'stage',
+  novelGenre: 'novel_genre',
+  novelSynopsis: 'novel_synopsis',
   targetDuration: 'target_duration',
   language: 'language',
   visualStyle: 'visual_style',
