@@ -32,12 +32,8 @@ export {
   logScriptProgress,
 } from './apiCore';
 
-// 提示词常量
+// 提示词查询（数据来自数据库缓存）
 export {
-  VISUAL_STYLE_PROMPTS,
-  VISUAL_STYLE_PROMPTS_CN,
-  NEGATIVE_PROMPTS,
-  SCENE_NEGATIVE_PROMPTS,
   getStylePrompt,
   getStylePromptCN,
   getNegativePrompt,

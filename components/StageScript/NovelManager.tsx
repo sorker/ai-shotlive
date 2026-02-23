@@ -5,7 +5,9 @@ import { fetchChaptersPaginated, fetchChapterContent } from '../../services/stor
 import { Upload, BookOpen, Trash2, ChevronDown, ChevronRight, FileText, AlertCircle, CheckCircle2, X, ChevronLeft, Loader2, Wand2, Settings2 } from 'lucide-react';
 import * as PS from '../../services/projectPatchService';
 import OptionSelector from './OptionSelector';
-import { NOVEL_GENRE_OPTIONS, LANGUAGE_OPTIONS, VISUAL_STYLE_OPTIONS, STYLES } from './constants';
+import { NOVEL_GENRE_OPTIONS, LANGUAGE_OPTIONS, STYLES } from './constants';
+
+type VisualStyleOption = { label: string; value: string; desc?: string };
 
 const PAGE_SIZE = 10;
 
@@ -19,6 +21,7 @@ interface Props {
   visualStyle: string;
   customGenreInput: string;
   customStyleInput: string;
+  visualStyleOptions: VisualStyleOption[];
   onTitleChange: (value: string) => void;
   onNovelGenreChange: (value: string) => void;
   onNovelSynopsisChange: (value: string) => void;
@@ -31,7 +34,7 @@ interface Props {
 const NovelManager: React.FC<Props> = ({
   project, updateProject,
   title, novelGenre, novelSynopsis, language, visualStyle,
-  customGenreInput, customStyleInput,
+  customGenreInput, customStyleInput, visualStyleOptions,
   onTitleChange, onNovelGenreChange, onNovelSynopsisChange,
   onLanguageChange, onVisualStyleChange,
   onCustomGenreChange, onCustomStyleChange,
@@ -325,7 +328,7 @@ const NovelManager: React.FC<Props> = ({
           <OptionSelector
             label="视觉风格"
             icon={<Wand2 className="w-3 h-3" />}
-            options={VISUAL_STYLE_OPTIONS}
+            options={visualStyleOptions}
             value={visualStyle}
             onChange={onVisualStyleChange}
             customInput={customStyleInput}

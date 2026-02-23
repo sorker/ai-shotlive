@@ -579,6 +579,28 @@ export const initDatabase = async (): Promise<void> => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    // ========== 视觉风格表 ==========
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS visual_styles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        value VARCHAR(100) NOT NULL COMMENT '风格键值，如 anime, live-action',
+        label VARCHAR(255) NOT NULL DEFAULT '' COMMENT '显示标签，如 🌟 日式动漫',
+        \`desc\` VARCHAR(500) DEFAULT '' COMMENT '简短描述',
+        prompt TEXT COMMENT '英文视觉提示词（用于AI图像生成）',
+        prompt_cn TEXT COMMENT '中文视觉描述',
+        negative_prompt TEXT COMMENT '角色负面提示词',
+        scene_negative_prompt TEXT COMMENT '场景负面提示词',
+        sort_order INT DEFAULT 0,
+        is_default TINYINT(1) DEFAULT 0 COMMENT '是否为系统预置风格',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_user_value (user_id, value),
+        INDEX idx_user_id (user_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     // ========== 迁移：为参考图增加原始 URL 列 ==========
     // Seedream 等 API 生成图片时返回 URL，保存后可在后续生成关键帧时直接传 URL
     await addColumnIfNotExists(conn, 'script_characters', 'reference_image_url', 'TEXT COMMENT "角色参考图原始URL（CDN地址）"');

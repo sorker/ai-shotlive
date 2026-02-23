@@ -11,6 +11,7 @@ import SceneBreakdown from './SceneBreakdown';
 import NovelManager from './NovelManager';
 import EpisodeManager from './EpisodeManager';
 import * as PS from '../../services/projectPatchService';
+import { fetchVisualStyles, stylesToOptions, VisualStyle } from '../../services/visualStyleService';
 
 interface Props {
   project: ProjectState;
@@ -42,6 +43,19 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
   const [customStyleInput, setCustomStyleInput] = useState('');
   const [customGenreInput, setCustomGenreInput] = useState('');
   
+  // 数据库视觉风格
+  const [dbVisualStyles, setDbVisualStyles] = useState<VisualStyle[]>([]);
+  const [visualStyleOptions, setVisualStyleOptions] = useState<{ label: string; value: string; desc?: string }[]>([]);
+
+  useEffect(() => {
+    fetchVisualStyles()
+      .then((styles) => {
+        setDbVisualStyles(styles);
+        setVisualStyleOptions(stylesToOptions(styles));
+      })
+      .catch((err) => console.error('加载视觉风格失败:', err));
+  }, []);
+
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
@@ -714,6 +728,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
             visualStyle={localVisualStyle}
             customGenreInput={customGenreInput}
             customStyleInput={customStyleInput}
+            visualStyleOptions={visualStyleOptions}
             onTitleChange={setLocalTitle}
             onNovelGenreChange={setLocalNovelGenre}
             onNovelSynopsisChange={setLocalNovelSynopsis}

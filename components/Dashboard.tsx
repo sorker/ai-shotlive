@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Database, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Database, Settings, Sun, Moon, LogOut, Palette } from 'lucide-react';
 import { ProjectState, AssetLibraryItem, Character, Scene } from '../types';
 import { getAllProjectsMetadata, createNewProjectState, deleteProjectFromDB, getAllAssetLibraryItems, deleteAssetFromLibrary, loadProjectFromDB, saveProjectToDB, exportIndexedDBData, importIndexedDBData } from '../services/storageService';
 import { applyLibraryItemToProject } from '../services/assetLibraryService';
@@ -7,6 +7,7 @@ import { useAlert } from './GlobalAlert';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import ProfileModal from './ProfileModal';
+import VisualStyleManager from './VisualStyleManager';
 
 interface Props {
   onOpenProject: (project: ProjectState) => void;
@@ -32,6 +33,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
   const [isDataExporting, setIsDataExporting] = useState(false);
   const [isDataImporting, setIsDataImporting] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showVisualStyleManager, setShowVisualStyleManager] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const loadProjects = async () => {
@@ -469,6 +471,20 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
               </button>
 
               <button
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowVisualStyleManager(true);
+                }}
+                className="p-4 border border-[var(--border-primary)] hover:border-[var(--border-secondary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] transition-colors text-left"
+              >
+                <div className="flex items-center gap-2 text-[var(--text-primary)] text-sm font-bold">
+                  <Palette className="w-4 h-4 text-[var(--accent-text)]" />
+                  视觉风格管理
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] font-mono mt-2">管理视觉风格及提示词配置</div>
+              </button>
+
+              <button
                 onClick={handleExportData}
                 disabled={isDataExporting}
                 className="p-4 border border-[var(--border-primary)] hover:border-[var(--border-secondary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
@@ -676,6 +692,8 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
       )}
 
       {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
+
+      {showVisualStyleManager && <VisualStyleManager onClose={() => setShowVisualStyleManager(false)} />}
 
       <input
         ref={importInputRef}

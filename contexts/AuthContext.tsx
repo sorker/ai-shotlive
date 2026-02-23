@@ -9,6 +9,7 @@ import {
   apiGet,
   apiPut,
 } from '../services/apiClient';
+import { fetchVisualStyles } from '../services/visualStyleService';
 
 interface User {
   id: number;
@@ -111,8 +112,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = await apiGet<{ user: User }>('/api/auth/me');
         setUser(data.user);
 
-        // token 有效，同步用户偏好
+        // token 有效，同步用户偏好并预加载视觉风格缓存
         await syncPreferencesFromServer();
+        fetchVisualStyles().catch(() => {});
       } catch {
         // token 无效，清除
         clearAuth();
@@ -142,6 +144,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       // 同步用户偏好（主题、引导状态）
       await syncPreferencesFromServer();
+      // 预加载视觉风格缓存
+      fetchVisualStyles().catch(() => {});
     } catch {
       // 同步失败不影响登录
     }

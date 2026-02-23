@@ -1,6 +1,7 @@
 import { Shot, ProjectState, Keyframe, NineGridPanel, NineGridData } from '../../types';
-import { VISUAL_STYLE_PROMPTS, VIDEO_PROMPT_TEMPLATES, NINE_GRID } from './constants';
+import { VIDEO_PROMPT_TEMPLATES, NINE_GRID } from './constants';
 import { getCameraMovementCompositionGuide } from './cameraMovementGuides';
+import { getStylePrompt } from '../../services/ai/promptConstants';
 
 /**
  * getRefImagesForShot 的返回类型
@@ -102,7 +103,7 @@ export const buildKeyframePrompt = (
   propsInfo?: { name: string; description: string; hasImage: boolean }[],
   hasStartFrameRef?: boolean
 ): string => {
-  const stylePrompt = VISUAL_STYLE_PROMPTS[visualStyle] || visualStyle;
+  const stylePrompt = getStylePrompt(visualStyle);
   const cameraGuide = getCameraMovementCompositionGuide(cameraMovement, frameType);
   
   // 针对起始帧和结束帧的特定指导
@@ -480,7 +481,7 @@ export const buildPromptFromNineGridPanel = (
   cameraMovement: string,
   propsInfo?: { name: string; description: string; hasImage: boolean }[]
 ): string => {
-  const stylePrompt = VISUAL_STYLE_PROMPTS[visualStyle] || visualStyle;
+  const stylePrompt = getStylePrompt(visualStyle);
   
   // 角色一致性要求
   const characterConsistencyGuide = `【角色一致性要求】CHARACTER CONSISTENCY REQUIREMENTS - CRITICAL
