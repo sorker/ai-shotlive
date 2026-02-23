@@ -79,13 +79,19 @@ Traditional Text-to-Video models often struggle with specific camera movements a
 *   Click your username in the sidebar or project list to open Account Settings.
 *   Change username and password after verifying your current password.
 
+### Data Export & Import
+*   **Export**: From System Settings, export the current user's entire database (projects, assets, visual styles, model config, preferences) plus all media files from the `data/` folder as a single ZIP archive.
+*   **Import**: Upload a ZIP backup file, and the system automatically creates a new user account and imports all data under it. The new username and default password are displayed upon completion.
+*   Ideal for cross-server migration, periodic backups, and disaster recovery.
+
 ## Tech Stack
 
 *   **Frontend**: React 19, Vite, Tailwind CSS
 *   **Backend**: Express.js, MySQL, JWT authentication
 *   **AI**: Multi-provider text/image/video API with unified adapter layer (see `services/adapters`, `types/model.ts`)
 *   **Storage**: MySQL for projects, assets, model configs and user preferences; user data isolated by `user_id`
-*   **Files**: Novel uploads stored server-side in `uploads/`, isolated by user
+*   **Files**: Novel uploads in `uploads/`, media files (images/videos) in `data/`, isolated by user/project
+*   **Backup**: ZIP archive export/import (database + media files); import auto-creates a new user
 
 ## Why Choose AntSK API?
 
