@@ -766,6 +766,18 @@ const applyResultToProject = async (
         }
         break;
 
+      case 'prop_image':
+        if (target.entityId) {
+          const propFilePath = resolveToFilePath(projectId, 'prop', target.entityId, base64Result);
+          await pool.execute(
+            `UPDATE script_props SET reference_image = ?, reference_image_url = ?, status = 'completed'
+             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
+            [propFilePath, urlResult, target.entityId, projectId, userId, ...epParam]
+          );
+          console.log(`  📝 [TaskRunner] 道具图片已回写: ${target.entityId} → ${propFilePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
+        }
+        break;
+
       case 'turnaround':
         if (target.entityId) {
           const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result);

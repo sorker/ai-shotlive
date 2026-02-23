@@ -3,7 +3,7 @@
  * 包含美术指导文档生成、角色/场景视觉提示词生成、图像生成
  */
 
-import { Character, Scene, AspectRatio, ArtDirection, CharacterTurnaroundPanel } from "../../types";
+import { Character, Scene, Prop, AspectRatio, ArtDirection, CharacterTurnaroundPanel } from "../../types";
 import { ImageApiFormat, ImageModelDefinition } from "../../types/model";
 import { addRenderLogWithTokens } from '../renderLogService';
 import {
@@ -277,8 +277,8 @@ Output ONLY the JSON, no explanations.`;
  * 生成角色或场景的视觉提示词
  */
 export const generateVisualPrompts = async (
-  type: 'character' | 'scene',
-  data: Character | Scene,
+  type: 'character' | 'scene' | 'prop',
+  data: Character | Scene | Prop,
   genre: string,
   model?: string,
   visualStyle: string = 'live-action',
@@ -305,7 +305,39 @@ Mood Keywords: ${artDirection.moodKeywords.join(', ')}
 
   let prompt: string;
 
-  if (type === 'character') {
+  if (type === 'prop') {
+    const prop = data as Prop;
+    prompt = `You are an expert AI prompt engineer for ${visualStyle} style product/prop image generation.
+${artDirectionBlock}
+Create a detailed visual prompt for a standalone PROP/ITEM with the following structure:
+
+Prop Data:
+- Name: ${prop.name}
+- Category: ${prop.category}
+- Description: ${prop.description || 'Not specified'}
+
+REQUIRED STRUCTURE (output in ${language}):
+1. Object Identity: [what the item is, its primary function/purpose, overall shape and form]
+2. Materials & Textures: [surface materials, texture quality, reflectivity, wear/patina details${artDirection ? ` - MUST follow texture style: ${artDirection.textureStyle}` : ''}]
+3. Colors & Details: [color scheme, patterns, engravings, labels, distinguishing marks${artDirection ? ` - colors MUST harmonize with palette: ${artDirection.colorPalette.primary}, ${artDirection.colorPalette.secondary}, ${artDirection.colorPalette.accent}` : ''}]
+4. Scale & Proportions: [relative size description, key proportional features]
+5. Lighting & Presentation: [${artDirection ? `MUST follow project lighting: ${artDirection.lightingStyle}` : 'studio lighting setup, light direction, shadow quality'}]
+6. Technical Quality: ${stylePrompt}
+
+CRITICAL RULES:
+- ⚠️ ABSOLUTELY NO PEOPLE, NO HUMAN FIGURES, NO HANDS, NO CHARACTERS in the image
+- The prop/item must be shown as a standalone object on a clean, simple background
+- Focus on the object's unique visual characteristics for consistency across shots${artDirection ? `
+- MUST follow the Global Art Direction above for visual consistency with other project assets
+- Mood: ${artDirection.moodKeywords.join(', ')}` : ''}
+- Use specific, concrete visual details
+- Output as single paragraph, comma-separated
+- MUST include style keywords: ${visualStyle}
+- Length: 50-80 words
+- Focus on details that enable consistent reproduction across multiple images
+
+Output ONLY the visual prompt text, no explanations.`;
+  } else if (type === 'character') {
     const char = data as Character;
     prompt = `You are an expert AI prompt engineer for ${visualStyle} style image generation.
 ${artDirectionBlock}
