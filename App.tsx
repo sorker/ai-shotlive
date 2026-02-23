@@ -22,7 +22,6 @@ function App() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { showAlert } = useAlert();
   const [project, setProject] = useState<ProjectState | null>(null);
-  const [showQrCode, setShowQrCode] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showModelConfig, setShowModelConfig] = useState(false);

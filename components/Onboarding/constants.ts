@@ -17,7 +17,7 @@ export const WORKFLOW_STEPS = [
   {
     number: '①',
     title: '写剧本',
-    description: 'AI自动提取角色和场景',
+    description: '上传小说或输入故事，AI自动提取角色和场景',
   },
   {
     number: '②',
@@ -39,6 +39,11 @@ export const WORKFLOW_STEPS = [
 // 核心亮点
 export const HIGHLIGHTS = [
   {
+    icon: '📖',
+    title: '小说管理一体化',
+    description: '项目配置、小说上传、章节解析、剧集管理集中在同一页面',
+  },
+  {
     icon: '🎬',
     title: '首尾帧衔接',
     description: '可复制上一镜尾帧到下一镜首帧，镜头过渡更连贯',
@@ -54,9 +59,9 @@ export const HIGHLIGHTS = [
     description: '同一角色，多套造型随时切换',
   },
   {
-    icon: '🎨',
-    title: '风格统一',
-    description: '真人、动漫、3D任选，全片一致',
+    icon: '🔐',
+    title: '账户管理',
+    description: '点击用户名即可修改用户名和密码',
   },
 ] as const;
 
@@ -66,7 +71,7 @@ export const QUICK_START_OPTIONS = [
     id: 'novel',
     icon: '📖',
     title: '从小说开始',
-    description: '上传小说，按章节生成剧本再拆分镜',
+    description: '上传小说，按章节生成剧本再拆分镜（推荐）',
   },
   {
     id: 'script',

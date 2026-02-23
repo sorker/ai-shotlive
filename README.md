@@ -209,9 +209,9 @@ ai-shotlive-Director/
 ├── App.tsx, index.tsx, types.ts
 ├── types/model.ts           # 模型与提供商类型、内置模型列表
 ├── components/              # 前端组件
-│   ├── Login.tsx, Dashboard.tsx, Sidebar.tsx
+│   ├── Login.tsx, Dashboard.tsx, Sidebar.tsx, ProfileModal.tsx
 │   ├── StageScript/         # Phase 01：小说/剧集/故事/剧本与分镜
-│   │   ├── NovelManager.tsx # 小说上传与章节解析
+│   │   ├── NovelManager.tsx # 小说上传、章节解析与项目配置
 │   │   ├── EpisodeManager.tsx # 剧集与剧本生成
 │   │   ├── ScriptEditor.tsx, SceneBreakdown.tsx, ConfigPanel.tsx
 │   ├── StageAssets/         # Phase 02：角色/场景/道具资产
@@ -237,7 +237,8 @@ ai-shotlive-Director/
 │       ├── config/database.ts
 │       ├── middleware/auth.ts
 │       ├── routes/
-│       │   ├── auth.ts, projects.ts, assets.ts, models.ts
+│       │   ├── auth.ts      # 登录/注册/资料修改
+│       │   ├── projects.ts, assets.ts, models.ts
 │       │   ├── uploads.ts   # 小说等文件上传
 │       │   ├── tasks.ts     # 异步任务
 │       │   ├── projectPatch.ts
@@ -252,7 +253,7 @@ ai-shotlive-Director/
 
 | 表名 | 说明 | 用户隔离 |
 |------|------|---------|
-| `users` | 用户账号 | - |
+| `users` | 用户账号（支持修改用户名/密码） | - |
 | `projects` | 项目完整状态（含剧本、分镜、小说章节、剧集等） | 按 user_id |
 | `asset_library` | 角色/场景/道具资产 | 按 user_id |
 | `model_registry` | 模型配置（提供商、API Key、激活模型） | 按 user_id |
@@ -262,10 +263,10 @@ ai-shotlive-Director/
 
 ## 快速开始
 
-1. **登录**：使用默认账号（admin / admin123）或注册新用户。
+1. **登录**：使用默认账号（admin / admin123）或注册新用户。可点击用户名修改账户信息。
 2. **配置模型**：在「模型配置」中为需要的厂商填写 API Key，并选择当前文本/图像/视频模型。
-3. **剧本来源二选一**：
-   - **小说**：Phase 01 上传 `.txt` 小说 → 解析章节 → 选择章节创建剧集 → 生成该集剧本；
+3. **项目与剧本**：
+   - **小说**：Phase 01 小说管理页面同时管理项目配置（标题、体裁、风格等），上传 `.txt` 小说 → 解析章节 → 选择章节创建剧集 → 生成该集剧本；
    - **故事/剧本**：直接粘贴故事或剧本 → 生成分镜脚本。
 4. **资产**：Phase 02 生成角色定妆与场景概念图。
 5. **分镜与成片**：Phase 03 生成首帧（及可选尾帧），可选九宫格选构图，再选视频模型生成片段；Phase 04 预览与导出。

@@ -44,15 +44,14 @@ Traditional Text-to-Video models often struggle with specific camera movements a
 
 ## Key Features
 
-### Phase 01: Script & Storyboard
+### Phase 01: Novel & Script
+*   **Project Settings Integrated**: Project title, genre, visual style, language and other settings are managed directly in the Novel Management page — no page switching needed.
+*   **Novel → Script**: Upload `.txt` novel files, auto-parse chapters with pagination support, select chapters to create episodes, and AI adapts them into full scripts.
+*   **Episode Isolation**: Each episode maintains independent data for characters, storyboards, and assets.
 *   **Intelligent Breakdown**: Input a novel or story outline, and the AI automatically breaks it down into a standard script structure (Scenes, Time, Atmosphere).
 *   **Visual Translation**: Automatically converts text descriptions into professional visual prompts.
 *   **Pacing Control**: Set target durations (e.g., 30s Teaser, 3min Short), and the AI plans shot density accordingly.
-*   **✨ Manual Editing (NEW)**:
-    *   Edit character visual descriptions and shot prompts
-    *   Edit character list for each shot (add/remove characters)
-    *   Edit action descriptions and dialogues for each shot
-    *   Ensure generated results meet expectations with precise control over every detail
+*   **Manual Editing**: Edit character visual descriptions, shot prompts, character lists, action descriptions and dialogues for each shot.
 
 ### Phase 02: Assets & Casting
 *   **Character Consistency**:
@@ -76,15 +75,17 @@ Traditional Text-to-Video models often struggle with specific camera movements a
 *   **Render Tracking**: Monitor API render progress in real-time.
 *   **Asset Export**: Export all high-def keyframes and MP4 clips for post-production in Premiere/After Effects.
 
+### Account Management
+*   Click your username in the sidebar or project list to open Account Settings.
+*   Change username and password after verifying your current password.
+
 ## Tech Stack
 
-*   **Frontend**: React 19, Tailwind CSS (Sony Industrial Design Style)
-*   **AI Models**:
-    *   **Logic/Text**: `GPT-5.2`
-    *   **Vision**: `gemini-3-pro-image-preview`
-    *   **Video**: `veo_3_1_i2v_s_fast_fl_landscape` / `sora-2`
-    *   **Video**: `veo-3.1-fast-generate-preview`
-*   **Storage**: IndexedDB (Local browser database, privacy-focused, no backend dependency)
+*   **Frontend**: React 19, Vite, Tailwind CSS
+*   **Backend**: Express.js, MySQL, JWT authentication
+*   **AI**: Multi-provider text/image/video API with unified adapter layer (see `services/adapters`, `types/model.ts`)
+*   **Storage**: MySQL for projects, assets, model configs and user preferences; user data isolated by `user_id`
+*   **Files**: Novel uploads stored server-side in `uploads/`, isolated by user
 
 ## Why Choose AntSK API?
 
@@ -118,14 +119,11 @@ This project deeply integrates [**AntSK API Platform**](https://api.antsk.cn/), 
 
 ---
 
-## 💬 Join Our Community
+## 💬 Community & Feedback
 
-Scan the QR code to join our **AiShotlive Product Experience Group** on WeChat. Connect with fellow creators, share tips, and get the latest updates:
+Visit our GitHub repository to report issues, request features, and connect with other creators:
 
-<div align="center">
-<img src="./images/qrcode.jpg" width="300" alt="WeChat Group QR Code">
-<p><i>Scan to join WeChat group</i></p>
-</div>
+**[GitHub: sorker/ai-shotlive](https://github.com/sorker/ai-shotlive)**
 
 ---
 
@@ -235,11 +233,11 @@ docker-compose up -d --force-recreate
 
 ## Quick Start
 
-1.  **Configure Key**: Launch the app and input your AntSK API Key. [**Buy API Key**](https://api.antsk.cn)
-2.  **Input Story**: In Phase 01, enter your story idea and click "Generate Script".
-3.  **Art Direction**: Go to Phase 02, generate character sheets and scene concepts.
-4.  **Shot Production**: In Phase 03, generate the Start Frame first; for tighter control, add an End Frame or use the Nine-Grid preview to choose Start Frame composition.
-5.  **Motion Generation**: Select a video model and generate clips; Start-only frames can produce single-image video, while Start+End frames provide more stable transitions.
+1.  **Login**: Use the default account (admin / admin123) or register a new user. Click your username to update account info.
+2.  **Configure Models**: In Model Config, enter API Keys for your preferred providers and select active text/image/video models.
+3.  **Project & Script**: In Phase 01, project settings (title, genre, style) are managed alongside the novel. Upload a `.txt` novel → parse chapters → create episodes → generate scripts; or paste a story directly.
+4.  **Assets**: Go to Phase 02, generate character sheets and scene concepts.
+5.  **Shots & Export**: In Phase 03, generate the Start Frame first; for tighter control, add an End Frame or use the Nine-Grid preview. Phase 04 for preview and export.
 
 ---
 

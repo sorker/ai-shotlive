@@ -10,7 +10,7 @@ const HighlightPage: React.FC<HighlightPageProps> = ({ onNext }) => {
     <div className="flex flex-col items-center text-center">
       {/* 标题 */}
       <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-8">
-        新功能怎么用，一页看懂
+        核心功能，一页看懂
       </h2>
 
       <p className="text-[var(--text-tertiary)] text-sm mb-6 max-w-md">
@@ -39,9 +39,10 @@ const HighlightPage: React.FC<HighlightPageProps> = ({ onNext }) => {
           推荐使用路径
         </h3>
         <div className="space-y-2 text-[11px] text-[var(--text-secondary)] leading-relaxed">
-          <p>1. 在「导演工作台」点击「九宫格分镜预览」，先确认 9 个镜头描述再生成九宫格图。</p>
-          <p>2. 生成后可点击单个格子裁剪为首帧，也可直接使用整张九宫格图作为首帧。</p>
-          <p>3. 选择 Veo 系列模型时建议补齐首帧+尾帧；仅有首帧也可先生成单图视频。</p>
+          <p>1. 在「小说与剧本」页面完成项目设置、上传小说并创建剧集，生成剧本与分镜。</p>
+          <p>2. 在「导演工作台」点击「九宫格分镜预览」，先确认 9 个镜头描述再生成九宫格图。</p>
+          <p>3. 生成后可点击单个格子裁剪为首帧，也可直接使用整张九宫格图作为首帧。</p>
+          <p>4. 选择 Veo 系列模型时建议补齐首帧+尾帧；仅有首帧也可先生成单图视频。</p>
         </div>
       </div>
 
