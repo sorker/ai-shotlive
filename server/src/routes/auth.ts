@@ -128,4 +128,85 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   });
 });
 
+/**
+ * PUT /api/auth/profile - 修改用户名和/或密码
+ */
+router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { currentPassword, newUsername, newPassword } = req.body;
+    const userId = req.userId!;
+
+    if (!currentPassword) {
+      res.status(400).json({ error: '请输入当前密码以验证身份' });
+      return;
+    }
+
+    if (!newUsername && !newPassword) {
+      res.status(400).json({ error: '请提供新用户名或新密码' });
+      return;
+    }
+
+    const [users] = await getPool().execute<UserRow[]>(
+      'SELECT id, username, password_hash FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    const user = users[0];
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      res.status(401).json({ error: '当前密码错误' });
+      return;
+    }
+
+    let updatedUsername = user.username;
+
+    if (newUsername) {
+      if (newUsername.length < 2 || newUsername.length > 50) {
+        res.status(400).json({ error: '用户名长度应在 2-50 个字符之间' });
+        return;
+      }
+
+      if (newUsername !== user.username) {
+        const [existing] = await getPool().execute<UserRow[]>(
+          'SELECT id FROM users WHERE username = ? AND id != ?',
+          [newUsername, userId]
+        );
+        if (existing.length > 0) {
+          res.status(409).json({ error: '该用户名已被占用' });
+          return;
+        }
+        await getPool().execute('UPDATE users SET username = ? WHERE id = ?', [newUsername, userId]);
+        updatedUsername = newUsername;
+      }
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: '新密码长度不能少于 6 个字符' });
+        return;
+      }
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(newPassword, salt);
+      await getPool().execute('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+    }
+
+    const token = generateToken({ userId, username: updatedUsername });
+
+    console.log(`✅ 用户资料已更新: ${updatedUsername} (ID: ${userId})`);
+
+    res.json({
+      token,
+      user: { id: userId, username: updatedUsername }
+    });
+  } catch (err) {
+    console.error('修改资料失败:', err);
+    res.status(500).json({ error: '修改失败，请稍后重试' });
+  }
+});
+
 export default router;

@@ -6,6 +6,7 @@ import { applyLibraryItemToProject } from '../services/assetLibraryService';
 import { useAlert } from './GlobalAlert';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import ProfileModal from './ProfileModal';
 import qrCodeImg from '../images/qrcode.jpg';
 
 interface Props {
@@ -32,6 +33,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isDataExporting, setIsDataExporting] = useState(false);
   const [isDataImporting, setIsDataImporting] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const loadProjects = async () => {
@@ -247,9 +249,13 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
           </div>
           <div className="flex items-center gap-3">
             {user && (
-              <span className="text-[10px] text-[var(--text-muted)] font-mono mr-1">
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="text-[10px] text-[var(--text-muted)] font-mono mr-1 hover:text-[var(--text-primary)] hover:underline underline-offset-2 cursor-pointer transition-colors"
+                title="修改账户信息"
+              >
                 {user.username}
-              </span>
+              </button>
             )}
             <button
               onClick={logout}
@@ -694,6 +700,8 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
           </div>
         </div>
       )}
+
+      {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
 
       <input
         ref={importInputRef}

@@ -22,6 +22,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  updateProfile: (currentPassword: string, newUsername?: string, newPassword?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -155,6 +156,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(data.user);
   };
 
+  const updateProfile = async (currentPassword: string, newUsername?: string, newPassword?: string) => {
+    const data = await apiPut<{ token: string; user: User }>('/api/auth/profile', {
+      currentPassword,
+      newUsername: newUsername || undefined,
+      newPassword: newPassword || undefined,
+    });
+    saveAuth(data.token, data.user);
+    setUser(data.user);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -164,6 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout: handleLogout,
+        updateProfile,
       }}
     >
       {children}

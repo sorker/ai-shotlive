@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FileText, Users, Clapperboard, Film, ChevronLeft, ListTree, HelpCircle, Cpu, Sun, Moon, Loader2, LogOut } from 'lucide-react';
 import logoImg from '../logo.png';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import ProfileModal from './ProfileModal';
 
 interface SidebarProps {
   currentStage: string;
@@ -18,6 +19,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, projectName, activeEpisodeName, onShowOnboarding, onShowModelConfig, isNavigationLocked }) => {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const navItems = [
     { id: 'script', label: '小说与剧本', icon: FileText, sub: 'Phase 01' },
     { id: 'assets', label: '角色与场景', icon: Users, sub: 'Phase 02' },
@@ -149,7 +151,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, proje
         )}
         {user && (
           <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
-            <span className="font-mono text-[10px] text-[var(--text-muted)] truncate mr-2">{user.username}</span>
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="font-mono text-[10px] text-[var(--text-muted)] truncate mr-2 hover:text-[var(--text-primary)] hover:underline underline-offset-2 cursor-pointer transition-colors"
+              title="修改账户信息"
+            >
+              {user.username}
+            </button>
             <button
               onClick={logout}
               className="flex items-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--error-text)] cursor-pointer transition-colors flex-shrink-0"
@@ -161,6 +169,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, proje
           </div>
         )}
       </div>
+      {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
     </aside>
   );
 };
