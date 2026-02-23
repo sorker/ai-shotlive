@@ -116,17 +116,23 @@ const ModelList: React.FC<ModelListProps> = ({ type, onRefresh }) => {
   }, [models, selectedVendor]);
 
   const handleSetActiveModel = (modelId: string) => {
+    const model = models.find(m => m.id === modelId);
+    const provider = model ? getProviderById(model.providerId) : null;
+
+    if (!provider?.apiKey) {
+      showAlert(`请先为提供商「${provider?.name || '未知'}」配置 API Key`, { type: 'warning' });
+      return;
+    }
+
     if (setActiveModel(type, modelId)) {
       setActiveModelId(modelId);
-      const model = models.find(m => m.id === modelId);
-      const provider = model ? getProviderById(model.providerId) : null;
       showAlert(
         `已切换到 ${model?.name}${provider ? ` (${provider.name})` : ''}`, 
         { type: 'success' }
       );
       onRefresh();
     } else {
-      showAlert('设置激活模型失败，请确保模型已启用', { type: 'error' });
+      showAlert('设置激活模型失败，请确保模型已启用且提供商已配置 API Key', { type: 'error' });
     }
   };
 

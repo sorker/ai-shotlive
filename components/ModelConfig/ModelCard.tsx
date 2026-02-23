@@ -195,11 +195,16 @@ const ModelCard: React.FC<ModelCardProps> = ({
           {model.isEnabled && !isActive && (
             <button
               onClick={onSetActive}
-              className="px-2.5 py-1 bg-[var(--accent)] text-[var(--text-primary)] text-[10px] font-bold rounded hover:bg-[var(--accent-hover)] transition-colors flex items-center gap-1"
-              title="使用此模型"
+              disabled={!currentProvider?.apiKey}
+              className={`px-2.5 py-1 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${
+                currentProvider?.apiKey
+                  ? 'bg-[var(--accent)] text-[var(--text-primary)] hover:bg-[var(--accent-hover)]'
+                  : 'bg-[var(--bg-hover)] text-[var(--text-muted)] cursor-not-allowed opacity-60'
+              }`}
+              title={currentProvider?.apiKey ? '使用此模型' : '请先为提供商配置 API Key'}
             >
               <Circle className="w-3 h-3" />
-              使用
+              {currentProvider?.apiKey ? '使用' : '未配置Key'}
             </button>
           )}
           

@@ -5,7 +5,7 @@ import { VideoSettingsPanel } from '../AspectRatioSelector';
 import { 
   getDefaultAspectRatio, 
   getDefaultVideoDuration,
-  getVideoModels,
+  getAvailableVideoModels,
   getActiveVideoModel,
 } from '../../services/modelRegistry';
 import { VideoModelDefinition } from '../../types/model';
@@ -37,8 +37,7 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
     return modelId.toLowerCase() === 'veo_3_1-fast-4k' ? '4k' : 'standard';
   };
 
-  // 获取可用的视频模型
-  const videoModels = getVideoModels().filter(m => m.isEnabled);
+  const videoModels = getAvailableVideoModels();
   const defaultModel = getActiveVideoModel();
   
   // 状态（废弃模型已在数据加载层迁移，此处无需额外处理）

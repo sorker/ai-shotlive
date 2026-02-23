@@ -439,6 +439,9 @@ export const setActiveModel = (type: ModelType, modelId: string): boolean => {
   const model = getModelById(modelId);
   if (!model || model.type !== type || !model.isEnabled) return false;
 
+  const provider = getProviderById(model.providerId);
+  if (!provider?.apiKey) return false;
+
   const state = loadRegistry();
   state.activeModels[type] = modelId;
   saveRegistry(state);
@@ -590,6 +593,28 @@ export const isModelAvailable = (modelId: string): boolean => {
   
   const provider = getProviderById(model.providerId);
   return !!provider?.apiKey;
+};
+
+/**
+ * 获取可用模型（已启用 + 提供商已配置 API Key）
+ */
+export const getAvailableModels = (type?: ModelType): ModelDefinition[] => {
+  const state = loadRegistry();
+  const providerMap = new Map(state.providers.map(p => [p.id, p]));
+  const models = type ? state.models.filter(m => m.type === type) : state.models;
+  return models.filter(m => m.isEnabled && !!providerMap.get(m.providerId)?.apiKey);
+};
+
+export const getAvailableChatModels = (): ChatModelDefinition[] => {
+  return getAvailableModels('chat') as ChatModelDefinition[];
+};
+
+export const getAvailableImageModels = (): ImageModelDefinition[] => {
+  return getAvailableModels('image') as ImageModelDefinition[];
+};
+
+export const getAvailableVideoModels = (): VideoModelDefinition[] => {
+  return getAvailableModels('video') as VideoModelDefinition[];
 };
 
 // ============================================

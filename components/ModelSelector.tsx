@@ -13,9 +13,9 @@ import {
   VideoModelDefinition,
 } from '../types/model';
 import {
-  getChatModels,
-  getImageModels,
-  getVideoModels,
+  getAvailableChatModels,
+  getAvailableImageModels,
+  getAvailableVideoModels,
 } from '../services/modelRegistry';
 
 interface ModelSelectorProps {
@@ -41,21 +41,15 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   compact = false,
   label,
 }) => {
-  // 获取对应类型的模型列表（仅启用的模型）
   const getModels = (): ModelDefinition[] => {
-    let models: ModelDefinition[] = [];
     switch (type) {
       case 'chat':
-        models = getChatModels();
-        break;
+        return getAvailableChatModels();
       case 'image':
-        models = getImageModels();
-        break;
+        return getAvailableImageModels();
       case 'video':
-        models = getVideoModels();
-        break;
+        return getAvailableVideoModels();
     }
-    return models.filter(m => m.isEnabled);
   };
 
   const models = getModels();
@@ -123,7 +117,7 @@ export const VideoModelSelector: React.FC<{
   onChange: (modelId: string) => void;
   disabled?: boolean;
 }> = ({ value, onChange, disabled }) => {
-  const models = getVideoModels().filter(m => m.isEnabled);
+  const models = getAvailableVideoModels();
   const selectedModel = models.find(m => m.id === value) as VideoModelDefinition | undefined;
   
   return (
