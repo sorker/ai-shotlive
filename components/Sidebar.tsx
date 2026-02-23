@@ -33,7 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, proje
       {/* Header */}
       <div className="p-6 border-b border-[var(--border-subtle)]">
         <a 
-          href="https://tree456.com/" 
+          href="/" 
           target="_blank" 
           rel="noopener noreferrer"
           className="flex items-center gap-3 mb-6 group cursor-pointer"

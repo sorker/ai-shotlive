@@ -5,26 +5,26 @@
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
         http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
 
-  <!-- 首页 - AI 漫剧生成工作台 -->
+  <!-- 首页 - AI 漫剧生成工作台（部署时请将 your-domain.com 替换为实际域名） -->
   <url>
-    <loc>https://director.tree456.com/</loc>
+    <loc>https://your-domain.com/</loc>
     <lastmod>2026-02-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://director.tree456.com/UI.png</image:loc>
+      <image:loc>https://your-domain.com/UI.png</image:loc>
       <image:title>AI shotlive Director 工作台界面</image:title>
       <image:caption>AI 漫剧与短视频生成工作台 - 工业级一站式创作平台</image:caption>
     </image:image>
     <image:image>
-      <image:loc>https://director.tree456.com/logo.png</image:loc>
+      <image:loc>https://your-domain.com/logo.png</image:loc>
       <image:title>AI shotlive Director Logo</image:title>
     </image:image>
   </url>
 
   <!-- SEO 检查工具页 -->
   <url>
-    <loc>https://director.tree456.com/seo-check.html</loc>
+    <loc>https://your-domain.com/seo-check.html</loc>
     <lastmod>2026-02-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>

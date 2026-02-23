@@ -131,13 +131,13 @@ Visit our GitHub repository to report issues, request features, and connect with
 
 For **quick one-off creative tasks**, try our online tool platform:
 
-**[AiShotlive Creation Studio](https://aishotlive.tree456.com/)** offers:
-* 📷 **[AI Image Generation](https://aishotlive.tree456.com/gemini-image.html)**: Text-to-image with multiple styles
-* 📊 **[AI PowerPoint](https://aishotlive.tree456.com/ppt-content.html)**: Generate presentations instantly
-* 🎬 **[AI Video](https://aishotlive.tree456.com/ai-video-content.html)**: Intelligent video content generation
-* 📱 **[Social Media Content](https://aishotlive.tree456.com/redink-content.html)**: Viral titles and posts for Xiaohongshu
-* 📖 **[AI Novel Creation](https://aishotlive.tree456.com/novel-creation.html)**: Intelligent novel generation and continuation
-* 🎨 **[AI Anime Generation](https://aishotlive.tree456.com/anime-content.html)**: Anime-style image creation
+**AiShotlive Creation Studio** offers:
+* 📷 **AI Image Generation**: Text-to-image with multiple styles
+* 📊 **AI PowerPoint**: Generate presentations instantly
+* 🎬 **AI Video**: Intelligent video content generation
+* 📱 **Social Media Content**: Viral titles and posts for Xiaohongshu
+* 📖 **AI Novel Creation**: Intelligent novel generation and continuation
+* 🎨 **AI Anime Generation**: Anime-style image creation
 * 🎭 **No Installation**: Use directly in browser, instant access
 
 **Best For**: Daily creation, rapid prototyping, idea validation  

@@ -134,13 +134,13 @@ GitHub リポジトリで Issue の報告、機能リクエスト、他のクリ
 
 **単発のクリエイティブタスク**を素早く完成させたい場合は、オンラインツールプラットフォームをお試しください：
 
-**[AiShotlive クリエイションスタジオ](https://aishotlive.tree456.com/)** では以下を提供：
-* 📷 **[AI 画像生成](https://aishotlive.tree456.com/gemini-image.html)**：テキストから画像へ、複数のスタイルに対応
-* 📊 **[AI パワーポイント](https://aishotlive.tree456.com/ppt-content.html)**：プレゼンテーションを瞬時に生成
-* 🎬 **[AI ビデオ](https://aishotlive.tree456.com/ai-video-content.html)**：インテリジェントな動画コンテンツ生成
-* 📱 **[SNS コンテンツ](https://aishotlive.tree456.com/redink-content.html)**：小紅書向けのバイラルタイトルと投稿
-* 📖 **[AI 小説創作](https://aishotlive.tree456.com/novel-creation.html)**：インテリジェントな小説生成と続編作成
-* 🎨 **[AI アニメ生成](https://aishotlive.tree456.com/anime-content.html)**：アニメスタイルの画像作成
+**AiShotlive クリエイションスタジオ** では以下を提供：
+* 📷 **AI 画像生成**：テキストから画像へ、複数のスタイルに対応
+* 📊 **AI パワーポイント**：プレゼンテーションを瞬時に生成
+* 🎬 **AI ビデオ**：インテリジェントな動画コンテンツ生成
+* 📱 **SNS コンテンツ**：小紅書向けのバイラルタイトルと投稿
+* 📖 **AI 小説創作**：インテリジェントな小説生成と続編作成
+* 🎨 **AI アニメ生成**：アニメスタイルの画像作成
 * 🎭 **インストール不要**：ブラウザで直接使用、即座にアクセス
 
 **最適な用途**：日常的な創作、高速プロトタイピング、アイデア検証  

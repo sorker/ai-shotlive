@@ -1,5 +1,4 @@
 # AI shotlive Director - Robots.txt
-# https://director.tree456.com/robots.txt
 
 User-agent: *
 Allow: /
@@ -9,8 +8,8 @@ Disallow: /*.json$
 Disallow: /assets/*.js$
 Disallow: /seo-check.html
 
-# Sitemap
-Sitemap: https://director.tree456.com/sitemap.xml
+# Sitemap (replace your-domain.com with your actual domain when deploying)
+Sitemap: https://your-domain.com/sitemap.xml
 
 # Google
 User-agent: Googlebot
