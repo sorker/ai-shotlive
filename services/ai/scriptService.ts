@@ -13,6 +13,7 @@ import {
   logScriptProgress,
 } from './apiCore';
 import { getStylePrompt } from './promptConstants';
+import { ensureStylesLoaded } from '../visualStyleService';
 import { generateArtDirection, generateAllCharacterPrompts, generateVisualPrompts } from './visualService';
 
 // Re-export 日志回调函数（保持外部 API 兼容）
@@ -241,6 +242,7 @@ export const generateShotList = async (scriptData: ScriptData, model?: string): 
 
   const lang = scriptData.language || '中文';
   const visualStyle = scriptData.visualStyle || 'live-action';
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
   const artDir = scriptData.artDirection;
 

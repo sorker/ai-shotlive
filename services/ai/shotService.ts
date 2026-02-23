@@ -12,6 +12,7 @@ import {
   getActiveChatModel,
 } from './apiCore';
 import { getStylePromptCN, getStylePrompt } from './promptConstants';
+import { ensureStylesLoaded } from '../visualStyleService';
 import { generateImage } from './visualService';
 
 // ============================================
@@ -32,6 +33,7 @@ export const optimizeBothKeyframes = async (
   console.log('🎨 optimizeBothKeyframes 调用 - 同时优化起始帧和结束帧 - 使用模型:', model || '(active)');
   const startTime = Date.now();
 
+  await ensureStylesLoaded();
   const styleDesc = getStylePromptCN(visualStyle);
 
   const prompt = `
@@ -182,6 +184,7 @@ export const optimizeKeyframePrompt = async (
   console.log(`🎨 optimizeKeyframePrompt 调用 - ${frameType === 'start' ? '起始帧' : '结束帧'} - 使用模型:`, model || '(active)');
   const startTime = Date.now();
 
+  await ensureStylesLoaded();
   const frameLabel = frameType === 'start' ? '起始帧' : '结束帧';
   const frameFocus = frameType === 'start'
     ? '初始状态、起始姿态、预备动作、场景建立'
@@ -407,6 +410,7 @@ export const splitShotIntoSubShots = async (
   console.log('✂️ splitShotIntoSubShots 调用 - 使用模型:', model || '(active)');
   const startTime = Date.now();
 
+  await ensureStylesLoaded();
   const styleDesc = getStylePromptCN(visualStyle);
 
   const prompt = `
@@ -589,6 +593,7 @@ export const enhanceKeyframePrompt = async (
   console.log(`🎨 enhanceKeyframePrompt 调用 - ${frameType === 'start' ? '起始帧' : '结束帧'} - 使用模型:`, model || '(active)');
   const startTime = Date.now();
 
+  await ensureStylesLoaded();
   const styleDesc = getStylePromptCN(visualStyle);
   const frameLabel = frameType === 'start' ? '起始帧' : '结束帧';
 
@@ -784,6 +789,7 @@ export const generateNineGridImage = async (
   const startTime = Date.now();
   console.log('🎬 九宫格分镜 - 开始生成九宫格图片...');
 
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
 
   const positionLabels = [

@@ -21,6 +21,7 @@ import {
   getNegativePrompt,
   getSceneNegativePrompt,
 } from './promptConstants';
+import { ensureStylesLoaded } from '../visualStyleService';
 
 // ============================================
 // 美术指导文档生成
@@ -43,6 +44,7 @@ export const generateArtDirection = async (
   console.log('🎨 generateArtDirection 调用 - 生成全局美术指导文档');
   logScriptProgress('正在生成全局美术指导文档（Art Direction）...');
 
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
 
   const prompt = `You are a world-class Art Director for ${visualStyle} productions. 
@@ -154,6 +156,7 @@ export const generateAllCharacterPrompts = async (
   console.log(`🎭 generateAllCharacterPrompts 调用 - 批量生成 ${characters.length} 个角色的视觉提示词`);
   logScriptProgress(`正在批量生成 ${characters.length} 个角色的视觉提示词（风格统一模式）...`);
 
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
   const negativePrompt = getNegativePrompt(visualStyle);
 
@@ -282,6 +285,7 @@ export const generateVisualPrompts = async (
   language: string = '中文',
   artDirection?: ArtDirection
 ): Promise<{ visualPrompt: string; negativePrompt: string }> => {
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
   const negativePrompt = type === 'scene'
     ? getSceneNegativePrompt(visualStyle)
@@ -967,6 +971,7 @@ export const generateCharacterTurnaroundPanels = async (
   console.log(`🎭 generateCharacterTurnaroundPanels - 为角色 ${character.name} 生成九宫格造型视角`);
   logScriptProgress(`正在为角色「${character.name}」生成九宫格造型视角描述...`);
 
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
 
   // 构建 Art Direction 注入
@@ -1079,6 +1084,7 @@ export const generateCharacterTurnaroundImage = async (
   console.log(`🖼️ generateCharacterTurnaroundImage - 为角色 ${character.name} 生成九宫格造型图片`);
   logScriptProgress(`正在为角色「${character.name}」生成九宫格造型图片...`);
 
+  await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
 
   // 构建九宫格图片生成提示词
