@@ -217,8 +217,8 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
         if (t.panels !== undefined || t.prompt !== undefined || t.status !== undefined) {
           sets.push('turnaround_data = ?');
           const [existing] = await pool.execute<any[]>(
-            'SELECT turnaround_data FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?',
-            [charId, projectId, userId]
+            'SELECT turnaround_data FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+            [charId, projectId, userId, episodeId]
           );
           let current: any = {};
           if (existing[0]?.turnaround_data) {
@@ -243,9 +243,9 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
       return;
     }
 
-    values.push(charId, projectId, userId);
+    values.push(charId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE script_characters SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE script_characters SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -261,14 +261,15 @@ router.delete('/:id/characters/:charId', async (req: AuthRequest, res: Response)
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     // 级联删除 variations
     await pool.execute(
-      'DELETE FROM character_variations WHERE character_id = ? AND project_id = ? AND user_id = ?',
-      [charId, projectId, userId]
+      'DELETE FROM character_variations WHERE character_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+      [charId, projectId, userId, episodeId]
     );
     await pool.execute(
-      'DELETE FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?',
-      [charId, projectId, userId]
+      'DELETE FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+      [charId, projectId, userId, episodeId]
     );
     res.json({ success: true });
   } catch (err: any) {
@@ -339,9 +340,9 @@ router.patch('/:id/characters/:charId/variations/:varId', async (req: AuthReques
       res.status(400).json({ error: '没有提供可更新的字段' });
       return;
     }
-    values.push(varId, charId, projectId, userId);
+    values.push(varId, charId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE character_variations SET ${sets.join(', ')} WHERE id = ? AND character_id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE character_variations SET ${sets.join(', ')} WHERE id = ? AND character_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -357,9 +358,10 @@ router.delete('/:id/characters/:charId/variations/:varId', async (req: AuthReque
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     await pool.execute(
-      'DELETE FROM character_variations WHERE id = ? AND character_id = ? AND project_id = ? AND user_id = ?',
-      [varId, charId, projectId, userId]
+      'DELETE FROM character_variations WHERE id = ? AND character_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+      [varId, charId, projectId, userId, episodeId]
     );
     res.json({ success: true });
   } catch (err: any) {
@@ -433,9 +435,9 @@ router.patch('/:id/scenes/:sceneId', async (req: AuthRequest, res: Response) => 
       res.status(400).json({ error: '没有提供可更新的字段' });
       return;
     }
-    values.push(sceneId, projectId, userId);
+    values.push(sceneId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE script_scenes SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE script_scenes SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -451,9 +453,10 @@ router.delete('/:id/scenes/:sceneId', async (req: AuthRequest, res: Response) =>
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     await pool.execute(
-      'DELETE FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ?',
-      [sceneId, projectId, userId]
+      'DELETE FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+      [sceneId, projectId, userId, episodeId]
     );
     res.json({ success: true });
   } catch (err: any) {
@@ -526,9 +529,9 @@ router.patch('/:id/props/:propId', async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: '没有提供可更新的字段' });
       return;
     }
-    values.push(propId, projectId, userId);
+    values.push(propId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE script_props SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE script_props SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -544,9 +547,10 @@ router.delete('/:id/props/:propId', async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     await pool.execute(
-      'DELETE FROM script_props WHERE id = ? AND project_id = ? AND user_id = ?',
-      [propId, projectId, userId]
+      'DELETE FROM script_props WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+      [propId, projectId, userId, episodeId]
     );
     res.json({ success: true });
   } catch (err: any) {
@@ -689,9 +693,9 @@ router.patch('/:id/shots/:shotId', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    values.push(shotId, projectId, userId);
+    values.push(shotId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE shots SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE shots SET ${sets.join(', ')} WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -707,10 +711,11 @@ router.delete('/:id/shots/:shotId', async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     // 级联删除 keyframes 和 video intervals
-    await pool.execute('DELETE FROM shot_keyframes WHERE shot_id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
-    await pool.execute('DELETE FROM shot_video_intervals WHERE shot_id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
-    await pool.execute('DELETE FROM shots WHERE id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
+    await pool.execute('DELETE FROM shot_keyframes WHERE shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?', [shotId, projectId, userId, episodeId]);
+    await pool.execute('DELETE FROM shot_video_intervals WHERE shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?', [shotId, projectId, userId, episodeId]);
+    await pool.execute('DELETE FROM shots WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?', [shotId, projectId, userId, episodeId]);
     res.json({ success: true });
   } catch (err: any) {
     console.error('DELETE shot failed:', err.message);
@@ -742,9 +747,9 @@ router.patch('/:id/shots/:shotId/keyframes/:kfId', async (req: AuthRequest, res:
       res.status(400).json({ error: '没有提供可更新的字段' });
       return;
     }
-    values.push(kfId, shotId, projectId, userId);
+    values.push(kfId, shotId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE shot_keyframes SET ${sets.join(', ')} WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE shot_keyframes SET ${sets.join(', ')} WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -781,9 +786,9 @@ router.patch('/:id/shots/:shotId/videos/:videoId', async (req: AuthRequest, res:
       res.status(400).json({ error: '没有提供可更新的字段' });
       return;
     }
-    values.push(videoId, shotId, projectId, userId);
+    values.push(videoId, shotId, projectId, userId, episodeId);
     await pool.execute(
-      `UPDATE shot_video_intervals SET ${sets.join(', ')} WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?`,
+      `UPDATE shot_video_intervals SET ${sets.join(', ')} WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
       values
     );
     res.json({ success: true });
@@ -1332,8 +1337,8 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
       await conn.beginTransaction();
 
       const [origRows] = await conn.execute<any[]>(
-        'SELECT sort_order FROM shots WHERE id = ? AND project_id = ? AND user_id = ?',
-        [shotId, projectId, userId]
+        'SELECT sort_order FROM shots WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?',
+        [shotId, projectId, userId, episodeId]
       );
       if (origRows.length === 0) {
         await conn.rollback();
@@ -1342,9 +1347,9 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
       }
       const origSortOrder = origRows[0].sort_order;
 
-      await conn.execute('DELETE FROM shot_keyframes WHERE shot_id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
-      await conn.execute('DELETE FROM shot_video_intervals WHERE shot_id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
-      await conn.execute('DELETE FROM shots WHERE id = ? AND project_id = ? AND user_id = ?', [shotId, projectId, userId]);
+      await conn.execute('DELETE FROM shot_keyframes WHERE shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?', [shotId, projectId, userId, episodeId]);
+      await conn.execute('DELETE FROM shot_video_intervals WHERE shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?', [shotId, projectId, userId, episodeId]);
+      await conn.execute('DELETE FROM shots WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?', [shotId, projectId, userId, episodeId]);
 
       const shift = newShots.length - 1;
       if (shift > 0) {
