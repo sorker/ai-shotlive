@@ -162,8 +162,9 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         logScriptProgress('检测到未完成的后台解析任务，正在恢复...');
 
         const resultStr = await waitForTask(scriptTask.id, {
-          onProgress: (progress, status) => {
-            setProcessingMessage(`后台解析中 (${progress}%) - 刷新页面不影响进度`);
+          onProgress: (progress, _status, statusMessage) => {
+            const detail = statusMessage || '刷新页面不影响进度';
+            setProcessingMessage(`后台解析中 (${progress}%) - ${detail}`);
           },
           timeout: 15 * 60 * 1000,
           pollInterval: 3000,
@@ -253,19 +254,12 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
           visualStyle: finalVisualStyle,
           targetDuration: finalDuration,
           title: localTitle && localTitle !== '未命名项目' ? localTitle : undefined,
-          onProgress: (progress, status) => {
-            const phaseMessages: Record<string, string> = {
-              pending: '等待开始...',
-              running: '正在解析...',
-              polling: '正在解析...',
-            };
-            const msg = phaseMessages[status] || `进度 ${progress}%`;
-            setProcessingMessage(`后台解析中 (${progress}%) - ${msg}`);
-            if (progress > 0 && progress <= 20) logScriptProgress('正在解析剧本结构...');
-            else if (progress > 20 && progress <= 35) logScriptProgress('正在生成美术指导文档...');
-            else if (progress > 35 && progress <= 60) logScriptProgress('正在生成角色视觉提示词...');
-            else if (progress > 60 && progress <= 75) logScriptProgress('正在生成场景视觉提示词...');
-            else if (progress > 75) logScriptProgress('正在生成分镜列表...');
+          onProgress: (progress, _status, statusMessage) => {
+            const detail = statusMessage || '正在解析...';
+            setProcessingMessage(`后台解析中 (${progress}%) - ${detail}`);
+            if (statusMessage) {
+              logScriptProgress(statusMessage);
+            }
           },
         }
       );

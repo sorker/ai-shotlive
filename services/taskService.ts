@@ -64,6 +64,7 @@ export interface TaskStatus {
   status: 'pending' | 'running' | 'polling' | 'completed' | 'failed' | 'cancelled';
   modelId: string;
   progress: number;
+  statusMessage: string;
   error: string | null;
   providerTaskId: string | null;
   provider: string | null;
@@ -77,8 +78,8 @@ export interface TaskStatus {
 }
 
 export interface TaskWaitOptions {
-  /** 进度回调 */
-  onProgress?: (progress: number, status: string) => void;
+  /** 进度回调 (progress: 0-100, status: 任务状态, statusMessage: 详细进度描述) */
+  onProgress?: (progress: number, status: string, statusMessage: string) => void;
   /** 超时时间（毫秒），默认 25 分钟 */
   timeout?: number;
   /** 轮询间隔（毫秒），默认 3000 */
@@ -208,7 +209,7 @@ export const waitForTask = async (
 
         if (cancelled) return;
 
-        onProgress?.(task.progress, task.status);
+        onProgress?.(task.progress, task.status, task.statusMessage || '');
 
         switch (task.status) {
           case 'completed': {
@@ -280,7 +281,7 @@ export const generateVideoServerSide = async (
     aspectRatio?: AspectRatio;
     duration?: VideoDuration;
     target?: TaskCreateParams['target'];
-    onProgress?: (progress: number, status: string) => void;
+    onProgress?: (progress: number, status: string, statusMessage: string) => void;
     signal?: AbortSignal;
   } = {}
 ): Promise<string> => {
@@ -317,7 +318,7 @@ export const generateImageServerSide = async (
     isVariation?: boolean;
     hasTurnaround?: boolean;
     target?: TaskCreateParams['target'];
-    onProgress?: (progress: number, status: string) => void;
+    onProgress?: (progress: number, status: string, statusMessage: string) => void;
     signal?: AbortSignal;
   } = {}
 ): Promise<string> => {
@@ -388,7 +389,7 @@ export const parseScriptServerSide = async (
     visualStyle: string;
     targetDuration: string;
     title?: string;
-    onProgress?: (progress: number, status: string) => void;
+    onProgress?: (progress: number, status: string, statusMessage: string) => void;
     signal?: AbortSignal;
   }
 ): Promise<{ scriptData: any; shots: any[] }> => {
@@ -444,8 +445,8 @@ export const recoverProjectTasks = async (
 
       // 为每个活跃任务启动轮询
       waitForTask(task.id, {
-        onProgress: (progress, status) => {
-          onTaskProgress?.({ ...task, progress, status: status as any }, progress);
+        onProgress: (progress, status, statusMessage) => {
+          onTaskProgress?.({ ...task, progress, status: status as any, statusMessage }, progress);
         },
       }).then(result => {
         onTaskComplete?.({ ...task, status: 'completed' }, result);

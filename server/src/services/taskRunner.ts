@@ -80,6 +80,7 @@ export interface TaskRecord {
   result: string | null;
   error: string | null;
   progress: number;
+  status_message: string;
   target_type: string | null;
   target_shot_id: string | null;
   target_entity_id: string | null;
@@ -725,7 +726,7 @@ const executeScriptParseTask = async (
       title: spParams.title,
     },
     (progress, message) => {
-      updateTaskProgress(pool, taskId, progress).catch(() => {});
+      updateTaskProgress(pool, taskId, progress, message).catch(() => {});
       console.log(`  📊 [ScriptParser] ${taskId}: ${progress}% - ${message}`);
     }
   );
@@ -1079,11 +1080,18 @@ const updateProviderTaskId = async (
   );
 };
 
-const updateTaskProgress = async (pool: Pool, taskId: string, progress: number): Promise<void> => {
-  await pool.execute(
-    'UPDATE generation_tasks SET progress = ?, updated_at = NOW() WHERE id = ?',
-    [progress, taskId]
-  );
+const updateTaskProgress = async (pool: Pool, taskId: string, progress: number, message?: string): Promise<void> => {
+  if (message) {
+    await pool.execute(
+      'UPDATE generation_tasks SET progress = ?, status_message = ?, updated_at = NOW() WHERE id = ?',
+      [progress, message, taskId]
+    );
+  } else {
+    await pool.execute(
+      'UPDATE generation_tasks SET progress = ?, updated_at = NOW() WHERE id = ?',
+      [progress, taskId]
+    );
+  }
 };
 
 const completeTask = async (pool: Pool, taskId: string, result: string): Promise<void> => {

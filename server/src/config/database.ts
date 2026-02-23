@@ -611,6 +611,9 @@ export const initDatabase = async (): Promise<void> => {
     // ========== 迁移：为任务表添加 episode_id ==========
     await addColumnIfNotExists(conn, 'generation_tasks', 'target_episode_id', "VARCHAR(255) NOT NULL DEFAULT '' COMMENT '任务关联的剧本ID'");
 
+    // ========== 迁移：为任务表添加 status_message（详细进度描述） ==========
+    await addColumnIfNotExists(conn, 'generation_tasks', 'status_message', "VARCHAR(500) DEFAULT '' COMMENT '详细进度描述，如：生成场景视觉提示词：xxx'");
+
     // ========== 迁移：为下游数据表添加 episode_id 列，实现剧本级数据隔离 ==========
     const episodeScopedTables = [
       'script_characters', 'character_variations', 'script_scenes', 'script_props',
