@@ -258,9 +258,6 @@ docker-compose up -d --force-recreate
 
 - ✅ 個人学習および非商用利用が許可されています
 - ✅ 同じライセンスの下での改変と二次的著作物が許可されています
-- ❌ 商用利用は禁止されています（商用ライセンスが必要です）
-
-商用ライセンスについては、お問い合わせください：antskpro@qq.com
 
 ---
 *Built for Creators, by AiShotlive.*

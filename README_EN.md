@@ -255,9 +255,7 @@ This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/lic
 
 - ✅ Personal learning and non-commercial use allowed
 - ✅ Modification and derivative works allowed (under the same license)
-- ❌ Commercial use prohibited (requires commercial license)
 
-For commercial licensing, please contact: antskpro@qq.com
 
 ---
 *Built for Creators, by AiShotlive.*

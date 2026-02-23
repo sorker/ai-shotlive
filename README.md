@@ -287,6 +287,6 @@ ai-shotlive-Director/
 
 ## 许可证
 
-[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — 允许个人与非商业使用及在相同许可下修改与二次创作；商业使用需获得授权。联系：antskpro@qq.com
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — 允许个人与非商业使用及在相同许可下修改与二次创作；
 
 *Built for Creators, by AiShotlive.*
