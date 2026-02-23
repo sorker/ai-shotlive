@@ -18,10 +18,11 @@ router.use(authMiddleware);
 /**
  * 获取项目当前激活的 episode_id（剧本级数据隔离）
  */
-async function getActiveEpisodeId(pool: ReturnType<typeof getPool>, projectId: string, userId: number): Promise<string> {
+async function getActiveEpisodeId(pool: ReturnType<typeof getPool>, projectId: string | string[], userId: number): Promise<string> {
+  const pid = Array.isArray(projectId) ? projectId[0] : projectId;
   const [rows] = await pool.execute<any[]>(
     'SELECT selected_episode_id FROM projects WHERE id = ? AND user_id = ?',
-    [projectId, userId]
+    [pid, userId]
   );
   return rows[0]?.selected_episode_id || '';
 }
@@ -34,11 +35,12 @@ function resolveBodyImages(
   projectId: string | string[],
   entityType: string,
   entityId: string | string[],
-  imageFields: string[] = ['referenceImage']
+  imageFields: string[] = ['referenceImage'],
+  episodeId?: string
 ): void {
   for (const field of imageFields) {
     if (body[field] !== undefined && body[field] !== null) {
-      body[field] = resolveToFilePath(projectId, entityType, entityId, body[field]);
+      body[field] = resolveToFilePath(projectId, entityType, entityId, body[field], episodeId);
     }
   }
 }
@@ -168,10 +170,10 @@ router.post('/:id/characters', async (req: AuthRequest, res: Response) => {
     const turnaroundData = ch.turnaround
       ? JSON.stringify({ panels: ch.turnaround.panels || [], prompt: ch.turnaround.prompt || '', status: ch.turnaround.status || 'pending' })
       : null;
-    const turnaroundImage = resolveToFilePath(projectId, 'turnaround', ch.id, ch.turnaround?.imageUrl);
+    const turnaroundImage = resolveToFilePath(projectId, 'turnaround', ch.id, ch.turnaround?.imageUrl, episodeId);
 
     // base64 图片 → 保存为文件
-    const refImage = resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage);
+    const refImage = resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage, episodeId);
 
     await pool.execute(
       `INSERT INTO script_characters
@@ -200,8 +202,9 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     // base64 图片 → 保存为文件
-    resolveBodyImages(req.body, projectId, 'character', charId);
+    resolveBodyImages(req.body, projectId, 'character', charId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, CHARACTER_FIELDS);
 
     // turnaround 特殊处理
@@ -230,7 +233,7 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
         }
         if (t.imageUrl !== undefined) {
           sets.push('turnaround_image = ?');
-          values.push(resolveToFilePath(projectId, 'turnaround', charId, t.imageUrl));
+          values.push(resolveToFilePath(projectId, 'turnaround', charId, t.imageUrl, episodeId));
         }
       }
     }
@@ -303,7 +306,7 @@ router.post('/:id/characters/:charId/variations', async (req: AuthRequest, res: 
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
-    const refImage = resolveToFilePath(projectId, 'variation', v.id, v.referenceImage);
+    const refImage = resolveToFilePath(projectId, 'variation', v.id, v.referenceImage, episodeId);
     await pool.execute(
       `INSERT INTO character_variations
        (id, character_id, project_id, user_id, episode_id, name, visual_prompt, negative_prompt,
@@ -329,7 +332,8 @@ router.patch('/:id/characters/:charId/variations/:varId', async (req: AuthReques
   const userId = req.userId!;
 
   try {
-    resolveBodyImages(req.body, projectId, 'variation', varId);
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+    resolveBodyImages(req.body, projectId, 'variation', varId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, VARIATION_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -395,7 +399,7 @@ router.post('/:id/scenes', async (req: AuthRequest, res: Response) => {
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
-    const refImage = resolveToFilePath(projectId, 'scene', s.id, s.referenceImage);
+    const refImage = resolveToFilePath(projectId, 'scene', s.id, s.referenceImage, episodeId);
     await pool.execute(
       `INSERT INTO script_scenes
        (id, project_id, user_id, episode_id, location, time_period, atmosphere, visual_prompt, negative_prompt,
@@ -422,7 +426,8 @@ router.patch('/:id/scenes/:sceneId', async (req: AuthRequest, res: Response) => 
   const userId = req.userId!;
 
   try {
-    resolveBodyImages(req.body, projectId, 'scene', sceneId);
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+    resolveBodyImages(req.body, projectId, 'scene', sceneId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, SCENE_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -487,7 +492,7 @@ router.post('/:id/props', async (req: AuthRequest, res: Response) => {
     );
     const sortOrder = (maxRows[0]?.mx ?? -1) + 1;
 
-    const refImage = resolveToFilePath(projectId, 'prop', p.id, p.referenceImage);
+    const refImage = resolveToFilePath(projectId, 'prop', p.id, p.referenceImage, episodeId);
     await pool.execute(
       `INSERT INTO script_props
        (id, project_id, user_id, episode_id, name, category, description, visual_prompt, negative_prompt,
@@ -514,7 +519,8 @@ router.patch('/:id/props/:propId', async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   try {
-    resolveBodyImages(req.body, projectId, 'prop', propId);
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+    resolveBodyImages(req.body, projectId, 'prop', propId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, PROP_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -609,7 +615,7 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
           JSON.stringify(shot.props || []),
           shot.videoModel || null,
           ng?.panels ? JSON.stringify(ng.panels) : null,
-          resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl) || null,
+          resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl, episodeId) || null,
           ng?.prompt || null, ng?.status || null,
           sortOrder,
         ]
@@ -620,7 +626,7 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
           `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '',
-           resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
+           resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl, episodeId) || null, kf.status || 'pending']
         );
       }
 
@@ -635,7 +641,7 @@ router.post('/:id/shots', async (req: AuthRequest, res: Response) => {
             iv.id, shot.id, projectId, userId, episodeId,
             iv.startKeyframeId || '', iv.endKeyframeId || '',
             iv.duration || 0, iv.motionStrength || 5,
-            resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
+            resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl, episodeId) || null,
             iv.videoPrompt || null, iv.status || 'pending',
           ]
         );
@@ -661,6 +667,7 @@ router.patch('/:id/shots/:shotId', async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   try {
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
     const { sets, values } = buildPatchSets(req.body, SHOT_FIELDS);
 
     // nineGrid 特殊处理
@@ -671,7 +678,7 @@ router.patch('/:id/shots/:shotId', async (req: AuthRequest, res: Response) => {
         values.push(null, null, null, null);
       } else {
         if (ng.panels !== undefined) { sets.push('nine_grid_panels = ?'); values.push(JSON.stringify(ng.panels)); }
-        if (ng.imageUrl !== undefined) { sets.push('nine_grid_image = ?'); values.push(resolveToFilePath(projectId, 'ninegrid', shotId, ng.imageUrl)); }
+        if (ng.imageUrl !== undefined) { sets.push('nine_grid_image = ?'); values.push(resolveToFilePath(projectId, 'ninegrid', shotId, ng.imageUrl, episodeId)); }
         if (ng.prompt !== undefined) { sets.push('nine_grid_prompt = ?'); values.push(ng.prompt); }
         if (ng.status !== undefined) { sets.push('nine_grid_status = ?'); values.push(ng.status); }
       }
@@ -728,7 +735,8 @@ router.patch('/:id/shots/:shotId/keyframes/:kfId', async (req: AuthRequest, res:
   const userId = req.userId!;
 
   try {
-    resolveBodyImages(req.body, projectId, 'keyframe', kfId, ['imageUrl']);
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+    resolveBodyImages(req.body, projectId, 'keyframe', kfId, ['imageUrl'], episodeId);
     const { sets, values } = buildPatchSets(req.body, KEYFRAME_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -766,7 +774,8 @@ router.patch('/:id/shots/:shotId/videos/:videoId', async (req: AuthRequest, res:
   const userId = req.userId!;
 
   try {
-    resolveBodyImages(req.body, projectId, 'video', videoId, ['videoUrl']);
+    const episodeId = await getActiveEpisodeId(pool, projectId, userId);
+    resolveBodyImages(req.body, projectId, 'video', videoId, ['videoUrl'], episodeId);
     const { sets, values } = buildPatchSets(req.body, VIDEO_INTERVAL_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -1172,10 +1181,10 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
           [
             ch.id, projectId, userId, episodeId, ch.name || '', ch.gender || '', ch.age || '', ch.personality || '',
             ch.visualPrompt || '', ch.negativePrompt || null, ch.coreFeatures || null,
-            resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage),
+            resolveToFilePath(projectId, 'character', ch.id, ch.referenceImage, episodeId),
             ch.referenceImageUrl || null,
             turnaroundMeta,
-            resolveToFilePath(projectId, 'turnaround', ch.id, ch.turnaround?.imageUrl),
+            resolveToFilePath(projectId, 'turnaround', ch.id, ch.turnaround?.imageUrl, episodeId),
             ch.status || 'pending', i,
           ]
         );
@@ -1188,7 +1197,7 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
               reference_image, reference_image_url, status, sort_order)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [v.id, ch.id, projectId, userId, episodeId, v.name || '', v.visualPrompt || '', v.negativePrompt || null,
-             resolveToFilePath(projectId, 'variation', v.id, v.referenceImage),
+             resolveToFilePath(projectId, 'variation', v.id, v.referenceImage, episodeId),
              v.referenceImageUrl || null, v.status || 'pending', j]
           );
         }
@@ -1205,7 +1214,7 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [s.id, projectId, userId, episodeId, s.location || '', s.time || '', s.atmosphere || '',
            s.visualPrompt || '', s.negativePrompt || null,
-           resolveToFilePath(projectId, 'scene', s.id, s.referenceImage),
+           resolveToFilePath(projectId, 'scene', s.id, s.referenceImage, episodeId),
            s.referenceImageUrl || null,
            s.status || 'pending', i]
         );
@@ -1222,7 +1231,7 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [p.id, projectId, userId, episodeId, p.name || '', p.category || '', p.description || '',
            p.visualPrompt || '', p.negativePrompt || null,
-           resolveToFilePath(projectId, 'prop', p.id, p.referenceImage),
+           resolveToFilePath(projectId, 'prop', p.id, p.referenceImage, episodeId),
            p.referenceImageUrl || null,
            p.status || 'pending', i]
         );
@@ -1253,9 +1262,9 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
             shot.id, projectId, userId, episodeId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
             shot.cameraMovement || '', shot.shotSize || null,
             JSON.stringify(shot.characters || []), JSON.stringify(shot.characterVariations || {}),
-            JSON.stringify(shot.props || []), shot.videoModel || null,
+            JSON.stringify(shot.props || []),             shot.videoModel || null,
             ng?.panels ? JSON.stringify(ng.panels) : null,
-            resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl) || null,
+            resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl, episodeId) || null,
             ng?.prompt || null, ng?.status || null,
             i,
           ]
@@ -1266,7 +1275,7 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
             `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '',
-             resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
+             resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl, episodeId) || null, kf.status || 'pending']
           );
         }
 
@@ -1279,7 +1288,7 @@ router.post('/:id/parse-result', async (req: AuthRequest, res: Response) => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [iv.id, shot.id, projectId, userId, episodeId, iv.startKeyframeId || '', iv.endKeyframeId || '',
              iv.duration || 0, iv.motionStrength || 5,
-             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
+             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl, episodeId) || null,
              iv.videoPrompt || null, iv.status || 'pending']
           );
         }
@@ -1358,9 +1367,9 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
             shot.id, projectId, userId, episodeId, shot.sceneId || '', shot.actionSummary || '', shot.dialogue || null,
             shot.cameraMovement || '', shot.shotSize || null,
             JSON.stringify(shot.characters || []), JSON.stringify(shot.characterVariations || {}),
-            JSON.stringify(shot.props || []), shot.videoModel || null,
+            JSON.stringify(shot.props || []),             shot.videoModel || null,
             ng?.panels ? JSON.stringify(ng.panels) : null,
-            resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl) || null,
+            resolveToFilePath(projectId, 'ninegrid', shot.id, ng?.imageUrl, episodeId) || null,
             ng?.prompt || null, ng?.status || null,
             origSortOrder + i,
           ]
@@ -1371,7 +1380,7 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
             `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [kf.id, shot.id, projectId, userId, episodeId, kf.type || 'start', kf.visualPrompt || '',
-             resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl) || null, kf.status || 'pending']
+             resolveToFilePath(projectId, 'keyframe', kf.id, kf.imageUrl, episodeId) || null, kf.status || 'pending']
           );
         }
 
@@ -1384,7 +1393,7 @@ router.post('/:id/shots/:shotId/split', async (req: AuthRequest, res: Response) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [iv.id, shot.id, projectId, userId, episodeId, iv.startKeyframeId || '', iv.endKeyframeId || '',
              iv.duration || 0, iv.motionStrength || 5,
-             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl) || null,
+             resolveToFilePath(projectId, 'video', iv.id, iv.videoUrl, episodeId) || null,
              iv.videoPrompt || null, iv.status || 'pending']
           );
         }

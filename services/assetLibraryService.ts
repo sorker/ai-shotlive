@@ -11,7 +11,12 @@ const generateId = (prefix: string): string => {
  */
 const stripToken = (url: string | undefined): string | undefined => {
   if (!url || !url.startsWith('/api/')) return url;
-  return url.split('?')[0];
+  const [path, qs] = url.split('?');
+  if (!qs) return url;
+  const params = new URLSearchParams(qs);
+  params.delete('token');
+  const remaining = params.toString();
+  return remaining ? `${path}?${remaining}` : path;
 };
 
 const cloneCharacterVariation = (variation: Character['variations'][number]) => ({

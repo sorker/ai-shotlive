@@ -28,22 +28,32 @@ import { AspectRatioSelector } from '../AspectRatioSelector';
 import { getUserAspectRatio, setUserAspectRatio, getActiveImageModel } from '../../services/modelRegistry';
 
 /**
- * 清理图片 URL 中的旧 token，用于跨剧本/项目导入资产时避免重复/过期 token 问题。
- * 返回不带 token 的干净 URL（后端 resolveToFilePath 会负责将 /api/ URL 解析为文件副本）
+ * 清理图片 URL 中的旧 token，保留 episode 等业务参数。
+ * 用于跨剧本/项目导入资产时避免重复/过期 token 问题。
  */
 const stripAuthToken = (url: string | undefined): string | undefined => {
   if (!url || !url.startsWith('/api/')) return url;
-  return url.split('?')[0];
+  const [path, qs] = url.split('?');
+  if (!qs) return url;
+  const params = new URLSearchParams(qs);
+  params.delete('token');
+  const remaining = params.toString();
+  return remaining ? `${path}?${remaining}` : path;
 };
 
 /**
- * 为 /api/ 图片 URL 追加当前 token，用于 React 状态下 <img src> 即时显示
+ * 为 /api/ 图片 URL 追加当前 token（替换旧 token），保留 episode 等业务参数。
+ * 用于 React 状态下 <img src> 即时显示。
  */
 const withAuthToken = (url: string | undefined): string | undefined => {
   if (!url || !url.startsWith('/api/')) return url;
-  const clean = url.split('?')[0];
+  const [path, qs] = url.split('?');
+  const params = new URLSearchParams(qs || '');
+  params.delete('token');
   const token = getToken();
-  return token ? `${clean}?token=${token}` : clean;
+  if (token) params.set('token', token);
+  const result = params.toString();
+  return result ? `${path}?${result}` : path;
 };
 
 interface Props {
@@ -1373,12 +1383,13 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredLibraryItems.map((item) => {
-                    const preview =
+                    const rawPreview =
                       item.type === 'character'
                         ? (item.data as Character).referenceImage
                         : item.type === 'scene'
                         ? (item.data as Scene).referenceImage
                         : (item.data as Prop).referenceImage;
+                    const preview = withAuthToken(rawPreview) ?? rawPreview;
                     return (
                       <div
                         key={item.id}

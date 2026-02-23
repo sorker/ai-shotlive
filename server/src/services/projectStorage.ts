@@ -287,37 +287,30 @@ export async function saveProjectNormalized(
     );
   }
 
+  // 剧本级数据隔离：使用当前选中的 episodeId
+  const episodeId = project.selectedEpisodeId || '';
+
   // 辅助：解析图片/视频值，base64 保存为文件，返回文件路径或 URL
-  // - 前端发来 base64 → 保存为文件，返回文件路径
-  // - 前端发来 URL → 原样返回
-  // - 前端发来 null/空 → 使用 DB 中原有值（可能是文件路径或 URL）
   const resolveImageValue = (
     frontendVal: string | undefined | null,
     cachedVal: string | undefined | null,
     entityType: string,
     entityId: string,
   ): string | null => {
-    // 前端传了 base64，保存为文件
     if (frontendVal && isBase64DataUri(frontendVal)) {
-      return resolveToFilePath(pid, entityType, entityId, frontendVal);
+      return resolveToFilePath(pid, entityType, entityId, frontendVal, episodeId || undefined);
     }
-    // 前端传了有效值（URL 或文件路径），直接用
     if (frontendVal && (frontendVal.startsWith('http') || isFilePath(frontendVal))) {
       return frontendVal;
     }
-    // 前端无值，使用 DB 缓存值
     if (cachedVal) {
-      // 如果缓存值是 base64（旧数据），趁机迁移为文件
       if (isBase64DataUri(cachedVal)) {
-        return resolveToFilePath(pid, entityType, entityId, cachedVal);
+        return resolveToFilePath(pid, entityType, entityId, cachedVal, episodeId || undefined);
       }
       return cachedVal;
     }
     return null;
   };
-
-  // 剧本级数据隔离：使用当前选中的 episodeId
-  const episodeId = project.selectedEpisodeId || '';
 
   // ⑤ 写入角色 + 角色变体
   const chars = sd?.characters || [];
@@ -340,7 +333,7 @@ export async function saveProjectNormalized(
         resolveImageValue(ch.referenceImage, prevCharImg.get(ch.id), 'character', ch.id),
         ch.referenceImageUrl || null,
         turnaroundMeta ? JSON.stringify(turnaroundMeta) : null,
-        resolveToFilePath(pid, 'turnaround', ch.id, ch.turnaround?.imageUrl) || null,
+        resolveToFilePath(pid, 'turnaround', ch.id, ch.turnaround?.imageUrl, episodeId || undefined) || null,
         ch.status || null,
         i,
       ]
@@ -423,7 +416,7 @@ export async function saveProjectNormalized(
         JSON.stringify(shot.props || []),
         shot.videoModel || null,
         ng?.panels ? JSON.stringify(ng.panels) : null,
-        resolveToFilePath(pid, 'ninegrid', shot.id, ng?.imageUrl) || null,
+        resolveToFilePath(pid, 'ninegrid', shot.id, ng?.imageUrl, episodeId || undefined) || null,
         ng?.prompt || null,
         ng?.status || null,
         i,
@@ -443,7 +436,7 @@ export async function saveProjectNormalized(
     // 视频片段
     if (shot.interval) {
       const iv = shot.interval;
-      const videoVal = resolveToFilePath(pid, 'video', iv.id, iv.videoUrl);
+      const videoVal = resolveToFilePath(pid, 'video', iv.id, iv.videoUrl, episodeId || undefined);
       await conn.execute(
         `INSERT INTO shot_video_intervals
          (id, shot_id, project_id, user_id, episode_id, start_keyframe_id, end_keyframe_id,
@@ -623,6 +616,8 @@ export async function loadProjectNormalized(
   );
 
   // 构建图片回退 URL 前缀（用于将 base64 替换为服务端 API URL）
+  // 带 episode 参数以精确隔离不同剧本的同 ID 实体
+  const epQuery = activeEpisodeId ? `?episode=${activeEpisodeId}` : '';
   const imgBase = `/api/projects/${projectId}/image`;
 
   // ── 组装角色变体（按角色分组）──
@@ -631,7 +626,7 @@ export async function loadProjectNormalized(
   for (const v of variationRows) {
     const cid = v.character_id;
     if (!variationsByChar.has(cid)) variationsByChar.set(cid, []);
-    const fallback = (v.reference_image || v.reference_image_url) ? `${imgBase}/variation/${v.id}` : undefined;
+    const fallback = (v.reference_image || v.reference_image_url) ? `${imgBase}/variation/${v.id}${epQuery}` : undefined;
     const imgSafe = sanitizeImageField(v.reference_image || v.reference_image_url, fallback);
     variationsByChar.get(cid)!.push({
       id: v.id,
@@ -649,13 +644,13 @@ export async function loadProjectNormalized(
     const turnaroundMeta = safeJsonParse(r.turnaround_data, null);
     let turnaroundImageUrl = r.turnaround_image || undefined;
     if (turnaroundImageUrl && (isBase64DataUri(turnaroundImageUrl) || isFilePath(turnaroundImageUrl))) {
-      turnaroundImageUrl = `${imgBase}/turnaround/${r.id}`;
+      turnaroundImageUrl = `${imgBase}/turnaround/${r.id}${epQuery}`;
     }
     const turnaround = turnaroundMeta
       ? { ...turnaroundMeta, imageUrl: turnaroundImageUrl }
       : undefined;
 
-    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/character/${r.id}` : undefined;
+    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/character/${r.id}${epQuery}` : undefined;
     const imgSafe = sanitizeImageField(r.reference_image || r.reference_image_url, fallback);
     return {
       id: r.id,
@@ -676,7 +671,7 @@ export async function loadProjectNormalized(
 
   // ── 组装场景 ──
   const scenes = sceneRows.map(r => {
-    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/scene/${r.id}` : undefined;
+    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/scene/${r.id}${epQuery}` : undefined;
     const imgSafe = sanitizeImageField(r.reference_image || r.reference_image_url, fallback);
     return {
       id: r.id,
@@ -693,7 +688,7 @@ export async function loadProjectNormalized(
 
   // ── 组装道具 ──
   const props = propRows.map(r => {
-    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/prop/${r.id}` : undefined;
+    const fallback = (r.reference_image || r.reference_image_url) ? `${imgBase}/prop/${r.id}${epQuery}` : undefined;
     const imgSafe = sanitizeImageField(r.reference_image || r.reference_image_url, fallback);
     return {
       id: r.id,
@@ -721,7 +716,7 @@ export async function loadProjectNormalized(
     const sid = kf.shot_id;
     if (!keyframesByShot.has(sid)) keyframesByShot.set(sid, []);
     // 关键帧图片：base64 替换为服务端回退 URL，避免传输大数据
-    const fallback = kf.image_url ? `${imgBase}/keyframe/${kf.id}` : undefined;
+    const fallback = kf.image_url ? `${imgBase}/keyframe/${kf.id}${epQuery}` : undefined;
     const kfImgSafe = sanitizeImageField(kf.image_url, fallback);
     keyframesByShot.get(sid)!.push({
       id: kf.id,
@@ -738,7 +733,7 @@ export async function loadProjectNormalized(
     // 视频：文件路径或 base64 都替换为服务端 API URL
     let videoUrl = iv.video_url || undefined;
     if (videoUrl && (videoUrl.startsWith('data:') || isFilePath(videoUrl))) {
-      videoUrl = `/api/projects/${projectId}/video/${iv.id}`;
+      videoUrl = `/api/projects/${projectId}/video/${iv.id}${epQuery}`;
     }
     intervalsByShot.set(iv.shot_id, {
       id: iv.id,
@@ -758,7 +753,7 @@ export async function loadProjectNormalized(
     let ngImageUrl = r.nine_grid_image || undefined;
     // 九宫格图片：文件路径或 base64 → API URL
     if (ngImageUrl && (isBase64DataUri(ngImageUrl) || isFilePath(ngImageUrl))) {
-      ngImageUrl = `${imgBase}/ninegrid/${r.id}`;
+      ngImageUrl = `${imgBase}/ninegrid/${r.id}${epQuery}`;
     }
     const nineGrid = ngPanels
       ? {

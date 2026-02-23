@@ -22,8 +22,10 @@ const appendAuthToken = (url: string | undefined): string | undefined => {
   if (!url || !url.startsWith('/api/')) return url;
   const token = getToken();
   if (!token) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${token}`;
+  const [path, qs] = url.split('?');
+  const params = new URLSearchParams(qs || '');
+  params.set('token', token);
+  return `${path}?${params.toString()}`;
 };
 
 /**

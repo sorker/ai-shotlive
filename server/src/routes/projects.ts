@@ -161,40 +161,48 @@ router.get('/:id/image/:entityType/:entityId', async (req: AuthRequest, res: Res
     const pool = getPool();
     const { id: projectId, entityType, entityId } = req.params;
     const userId = req.userId!;
+    const episode = typeof req.query.episode === 'string' ? req.query.episode : '';
+
+    // episode 过滤：精确匹配剧本，隔离不同剧本的同 ID 实体
+    const epClause = episode ? ' AND episode_id = ?' : '';
+    const epParams = episode ? [episode] : [];
+    // 非空图片过滤 + LIMIT 1（同 ID 可能存在于多个 episode）
+    const imgNotNull = (col: string) => ` AND ${col} IS NOT NULL AND ${col} != ''`;
 
     let query: string;
     let params: any[];
     let imageColumn = 'reference_image';
+
     switch (entityType) {
       case 'character':
-        query = 'SELECT reference_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT reference_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('reference_image')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         break;
       case 'scene':
-        query = 'SELECT reference_image FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT reference_image FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('reference_image')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         break;
       case 'prop':
-        query = 'SELECT reference_image FROM script_props WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT reference_image FROM script_props WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('reference_image')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         break;
       case 'variation':
-        query = 'SELECT reference_image FROM character_variations WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT reference_image FROM character_variations WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('reference_image')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         break;
       case 'keyframe':
-        query = 'SELECT image_url FROM shot_keyframes WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT image_url FROM shot_keyframes WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('image_url')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         imageColumn = 'image_url';
         break;
       case 'turnaround':
-        query = 'SELECT turnaround_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT turnaround_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('turnaround_image')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         imageColumn = 'turnaround_image';
         break;
       case 'ninegrid':
-        query = 'SELECT nine_grid_image FROM shots WHERE id = ? AND project_id = ? AND user_id = ?';
-        params = [entityId, projectId, userId];
+        query = `SELECT nine_grid_image FROM shots WHERE id = ? AND project_id = ? AND user_id = ?${epClause}${imgNotNull('nine_grid_image')} LIMIT 1`;
+        params = [entityId, projectId, userId, ...epParams];
         imageColumn = 'nine_grid_image';
         break;
       default:
@@ -265,9 +273,13 @@ router.get('/:id/video/:videoId', async (req: AuthRequest, res: Response) => {
     const { id: projectId, videoId } = req.params;
     const userId = req.userId!;
 
+    const episode = typeof req.query.episode === 'string' ? req.query.episode : '';
+    const epClause = episode ? ' AND episode_id = ?' : '';
+    const epParams = episode ? [episode] : [];
+
     const [rows] = await pool.execute<RowDataPacket[]>(
-      'SELECT video_url FROM shot_video_intervals WHERE id = ? AND project_id = ? AND user_id = ?',
-      [videoId, projectId, userId]
+      `SELECT video_url FROM shot_video_intervals WHERE id = ? AND project_id = ? AND user_id = ?${epClause}`,
+      [videoId, projectId, userId, ...epParams]
     );
     if (rows.length === 0 || !rows[0].video_url) {
       res.status(404).json({ error: '视频不存在' });

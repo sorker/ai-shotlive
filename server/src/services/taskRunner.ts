@@ -888,7 +888,7 @@ const applyResultToProject = async (
     switch (target.type) {
       case 'keyframe':
         if (target.entityId && target.shotId) {
-          const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result);
+          const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result, epId || undefined);
           await pool.execute(
             `UPDATE shot_keyframes SET image_url = ?, status = 'completed'
              WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?${epFilter}`,
@@ -900,7 +900,7 @@ const applyResultToProject = async (
 
       case 'video_interval':
         if (target.entityId && target.shotId) {
-          const filePath = resolveToFilePath(projectId, 'video', target.entityId, base64Result);
+          const filePath = resolveToFilePath(projectId, 'video', target.entityId, base64Result, epId || undefined);
           await pool.execute(
             `UPDATE shot_video_intervals SET video_url = ?, status = 'completed'
              WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?${epFilter}`,
@@ -912,7 +912,7 @@ const applyResultToProject = async (
 
       case 'character_image':
         if (target.entityId) {
-          const filePath = resolveToFilePath(projectId, 'character', target.entityId, base64Result);
+          const filePath = resolveToFilePath(projectId, 'character', target.entityId, base64Result, epId || undefined);
           await pool.execute(
             `UPDATE script_characters SET reference_image = ?, reference_image_url = ?, status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
@@ -924,7 +924,7 @@ const applyResultToProject = async (
 
       case 'scene_image':
         if (target.entityId) {
-          const filePath = resolveToFilePath(projectId, 'scene', target.entityId, base64Result);
+          const filePath = resolveToFilePath(projectId, 'scene', target.entityId, base64Result, epId || undefined);
           await pool.execute(
             `UPDATE script_scenes SET reference_image = ?, reference_image_url = ?, status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
@@ -936,7 +936,7 @@ const applyResultToProject = async (
 
       case 'prop_image':
         if (target.entityId) {
-          const propFilePath = resolveToFilePath(projectId, 'prop', target.entityId, base64Result);
+          const propFilePath = resolveToFilePath(projectId, 'prop', target.entityId, base64Result, epId || undefined);
           await pool.execute(
             `UPDATE script_props SET reference_image = ?, reference_image_url = ?, status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
@@ -948,7 +948,7 @@ const applyResultToProject = async (
 
       case 'turnaround':
         if (target.entityId) {
-          const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result);
+          const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result, epId || undefined);
           await pool.execute(
             `UPDATE shots SET nine_grid_image = ?, nine_grid_status = 'completed'
              WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
