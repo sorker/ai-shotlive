@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Sparkles, RefreshCw, Loader2, MapPin, Archive, X, Search, Trash2, Package } from 'lucide-react';
+import { Users, Sparkles, RefreshCw, Loader2, MapPin, Archive, X, Search, Trash2, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ProjectState, CharacterVariation, Character, Scene, Prop, AspectRatio, AssetLibraryItem, CharacterTurnaroundPanel } from '../../types';
 import { generateImage, generateVisualPrompts, generateCharacterTurnaroundPanels, generateCharacterTurnaroundImage } from '../../services/aiService';
 import { generateImageServerSide } from '../../services/taskService';
@@ -20,7 +20,7 @@ import PropCard from './PropCard';
 import WardrobeModal from './WardrobeModal';
 import TurnaroundModal from './TurnaroundModal';
 import { useAlert } from '../GlobalAlert';
-import { getAllAssetLibraryItems, saveAssetToLibrary, deleteAssetFromLibrary } from '../../services/storageService';
+import { fetchAssetLibraryPaginated, saveAssetToLibrary, deleteAssetFromLibrary } from '../../services/storageService';
 import { applyLibraryItemToProject, createLibraryItemFromCharacter, createLibraryItemFromScene, createLibraryItemFromProp, cloneCharacterForProject, cloneSceneForProject, clonePropForProject } from '../../services/assetLibraryService';
 import * as PS from '../../services/projectPatchService';
 import { getToken } from '../../services/apiClient';
@@ -75,6 +75,10 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [libraryItems, setLibraryItems] = useState<AssetLibraryItem[]>([]);
+  const [libraryTotal, setLibraryTotal] = useState(0);
+  const [libraryPage, setLibraryPage] = useState(1);
+  const [libraryPageSize] = useState(10);
+  const [libraryProjectOptions, setLibraryProjectOptions] = useState<{ id: string; name: string }[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState('');
   const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene' | 'prop'>('all');
@@ -211,13 +215,20 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     };
   }, []);
 
-  const refreshLibrary = async () => {
+  const fetchLibraryPage = async (page: number = 1) => {
     setLibraryLoading(true);
     try {
-      console.log('📦 [资产库] 正在加载资产库列表...');
-      const items = await getAllAssetLibraryItems();
-      console.log(`📦 [资产库] 已加载 ${items.length} 个资产`);
-      setLibraryItems(items);
+      const res = await fetchAssetLibraryPaginated({
+        page,
+        pageSize: libraryPageSize,
+        type: libraryFilter,
+        projectId: libraryProjectFilter === 'all' ? 'all' : libraryProjectFilter,
+      });
+      setLibraryItems(res.items);
+      setLibraryTotal(res.total);
+      setLibraryPage(res.page);
+      setLibraryProjectOptions(res.projectOptions || []);
+      console.log(`📦 [资产库] 已加载第 ${res.page} 页，共 ${res.total} 条（类型=${libraryFilter}, 项目=${libraryProjectFilter}）`);
     } catch (e) {
       console.error('❌ [资产库] 加载资产库失败:', e);
     } finally {
@@ -226,13 +237,14 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
   };
 
   useEffect(() => {
-    if (showLibraryModal) {
-      refreshLibrary();
-    }
-  }, [showLibraryModal]);
+    if (!showLibraryModal) return;
+    fetchLibraryPage(libraryPage);
+  }, [showLibraryModal, libraryPage, libraryFilter, libraryProjectFilter]);
 
   const openLibrary = (filter: 'all' | 'character' | 'scene' | 'prop', targetCharId: string | null = null) => {
     setLibraryFilter(filter);
+    setLibraryProjectFilter('all');
+    setLibraryPage(1);
     setReplaceTargetCharId(targetCharId);
     setShowLibraryModal(true);
   };
@@ -602,7 +614,11 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
   const handleDeleteLibraryItem = async (itemId: string) => {
     try {
       await deleteAssetFromLibrary(itemId);
-      setLibraryItems((prev) => prev.filter((item) => item.id !== itemId));
+      const nextTotal = Math.max(0, libraryTotal - 1);
+      const nextTotalPages = Math.max(1, Math.ceil(nextTotal / libraryPageSize));
+      const pageToShow = libraryPage > nextTotalPages ? nextTotalPages : libraryPage;
+      if (pageToShow !== libraryPage) setLibraryPage(pageToShow);
+      await fetchLibraryPage(pageToShow);
     } catch (e: any) {
       showAlert(e?.message || '删除资产失败', { type: 'error' });
     }
@@ -1233,21 +1249,12 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
   const turnaroundChar = turnaroundCharId
     ? project.scriptData.characters.find(c => compareIds(c.id, turnaroundCharId))
     : undefined;
-  const projectNameOptions = Array.from(
-    new Set(
-      libraryItems.map((item) => (item.projectName && item.projectName.trim()) || '未知项目')
-    )
-  ).sort((a, b) => (a as string).localeCompare(b as string, 'zh-CN'));
   const filteredLibraryItems = libraryItems.filter((item) => {
-    if (libraryFilter !== 'all' && item.type !== libraryFilter) return false;
-    if (libraryProjectFilter !== 'all') {
-      const projectName = (item.projectName && item.projectName.trim()) || '未知项目';
-      if (projectName !== libraryProjectFilter) return false;
-    }
     if (!libraryQuery.trim()) return true;
     const query = libraryQuery.trim().toLowerCase();
     return item.name.toLowerCase().includes(query);
   });
+  const totalPages = Math.max(1, Math.ceil(libraryTotal / libraryPageSize));
 
   return (
     <div className={STYLES.mainContainer}>
@@ -1315,7 +1322,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                 <div>
                   <div className="text-sm font-bold text-[var(--text-primary)]">资产库</div>
                   <div className="text-[10px] text-[var(--text-tertiary)] font-mono uppercase tracking-widest">
-                    {libraryItems.length} assets
+                    共 {libraryTotal} 条，第 {libraryPage}/{totalPages} 页
                   </div>
                 </div>
               </div>
@@ -1344,13 +1351,16 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                 <div className="min-w-[180px]">
                   <select
                     value={libraryProjectFilter}
-                    onChange={(e) => setLibraryProjectFilter(e.target.value)}
+                    onChange={(e) => {
+                      setLibraryProjectFilter(e.target.value);
+                      setLibraryPage(1);
+                    }}
                     className="w-full px-3 py-2 bg-[var(--bg-deep)] border border-[var(--border-primary)] rounded text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-secondary)]"
                   >
                     <option value="all">全部项目</option>
-                    {projectNameOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    {libraryProjectOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
                       </option>
                     ))}
                   </select>
@@ -1359,7 +1369,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                   {(['all', 'character', 'scene', 'prop'] as const).map((type) => (
                     <button
                       key={type}
-                      onClick={() => setLibraryFilter(type)}
+                      onClick={() => { setLibraryFilter(type); setLibraryPage(1); }}
                       className={`px-3 py-2 text-[10px] font-bold uppercase tracking-widest border rounded ${
                         libraryFilter === type
                           ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] border-[var(--btn-primary-bg)]'
@@ -1381,6 +1391,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                   暂无资产。可在角色或场景卡片中选择“加入资产库”。
                 </div>
               ) : (
+                <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredLibraryItems.map((item) => {
                     const rawPreview =
@@ -1450,6 +1461,32 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                     );
                   })}
                 </div>
+                {totalPages > 1 && (
+                  <div className="mt-6 flex items-center justify-center gap-4">
+                    <button
+                      type="button"
+                      disabled={libraryPage <= 1 || libraryLoading}
+                      onClick={() => setLibraryPage((p) => Math.max(1, p - 1))}
+                      className="p-2 rounded border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="上一页"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs text-[var(--text-muted)] font-mono">
+                      {libraryPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={libraryPage >= totalPages || libraryLoading}
+                      onClick={() => setLibraryPage((p) => Math.min(totalPages, p + 1))}
+                      className="p-2 rounded border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="下一页"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </div>

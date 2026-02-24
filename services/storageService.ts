@@ -238,6 +238,41 @@ export const saveAssetToLibrary = async (item: AssetLibraryItem): Promise<void> 
   await apiPut(`/api/assets/${item.id}`, item);
 };
 
+/** 分页+分类获取资产库：不一次拉取全部，默认每页 10 条；类型与项目在 DB 中区分 */
+export interface AssetLibraryPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  type?: 'all' | 'character' | 'scene' | 'prop';
+  projectId?: string;
+}
+
+export interface AssetLibraryPaginatedResult {
+  items: AssetLibraryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  projectOptions: { id: string; name: string }[];
+}
+
+const DEFAULT_ASSET_PAGE_SIZE = 10;
+
+export const fetchAssetLibraryPaginated = async (
+  params: AssetLibraryPaginatedParams = {}
+): Promise<AssetLibraryPaginatedResult> => {
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, params.pageSize ?? DEFAULT_ASSET_PAGE_SIZE));
+  const type = params.type ?? 'all';
+  const projectId = params.projectId ?? 'all';
+  const q = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    type,
+    projectId,
+  });
+  const res = await apiGet<AssetLibraryPaginatedResult>(`/api/assets?${q.toString()}`);
+  return res;
+};
+
 export const getAllAssetLibraryItems = async (): Promise<AssetLibraryItem[]> => {
   const items = await apiGet<AssetLibraryItem[]>('/api/assets');
   items.sort((a, b) => b.updatedAt - a.updatedAt);

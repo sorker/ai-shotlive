@@ -348,15 +348,16 @@ const EpisodeManager: React.FC<Props> = ({ project, updateProject, onSelectEpiso
       selectedEpisodeId: episode.id,
     });
 
+    // 先跳转到故事编辑页（而非分镜预览）
+    onSelectEpisodeForStoryboard(episode.id);
+
     // 切换剧本并重新加载该剧本的隔离数据
     if (onSwitchEpisode) {
-      // 先保存 rawScript
       await PS.patchProject(project.id, { rawScript: script, selectedEpisodeId: episode.id });
       await onSwitchEpisode(episode.id);
     } else {
       PS.patchProject(project.id, { rawScript: script, selectedEpisodeId: episode.id });
     }
-    onSelectEpisodeForStoryboard(episode.id);
   };
 
   const handleStartEditScript = async (episode: NovelEpisode) => {

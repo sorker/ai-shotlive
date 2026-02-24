@@ -628,6 +628,25 @@ export const initDatabase = async (): Promise<void> => {
       await addIndexIfNotExists(conn, table, `idx_episode`, '(episode_id)');
     }
 
+    // ========== 资产库：项目隔离与分页查询 ==========
+    // type 列已存在，用于区分角色/场景/道具；新增 project_id/project_name 用于项目筛选
+    await addColumnIfNotExists(conn, 'asset_library', 'project_id', "VARCHAR(255) DEFAULT NULL COMMENT '来源项目ID，用于项目间隔离与筛选'");
+    await addColumnIfNotExists(conn, 'asset_library', 'project_name', "VARCHAR(255) DEFAULT NULL COMMENT '来源项目名称，用于筛选展示'");
+    await addIndexIfNotExists(conn, 'asset_library', 'idx_type', '(type)');
+    await addIndexIfNotExists(conn, 'asset_library', 'idx_project', '(project_id)');
+    await addIndexIfNotExists(conn, 'asset_library', 'idx_user_updated', '(user_id, updated_at)');
+    // 从 data JSON 回填 project_id / project_name（兼容旧数据）
+    try {
+      const [res] = await conn.execute<RowDataPacket[]>(
+        `UPDATE asset_library SET project_id = NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(data, '$.projectId'))), ''),
+         project_name = NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(data, '$.projectName'))), '')
+         WHERE project_id IS NULL AND data LIKE '%projectId%'`
+      );
+      if ((res as any).affectedRows > 0) {
+        console.log(`  🔄 资产库已回填 project_id/project_name: ${(res as any).affectedRows} 条`);
+      }
+    } catch { /* MySQL 5.7 可能不支持 JSON_EXTRACT，忽略 */ }
+
     // 迁移现有数据：将没有 episode_id 的记录关联到项目当前选中的剧集
     await migrateExistingEpisodeIds(conn);
 

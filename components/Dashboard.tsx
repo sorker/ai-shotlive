@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Database, Settings, Sun, Moon, LogOut, Palette } from 'lucide-react';
-import { ProjectState, AssetLibraryItem, Character, Scene } from '../types';
-import { getAllProjectsMetadata, createNewProjectState, deleteProjectFromDB, getAllAssetLibraryItems, deleteAssetFromLibrary, loadProjectFromDB, saveProjectToDB, exportUserDataArchive, importUserDataArchive } from '../services/storageService';
+import { Plus, Trash2, Loader2, Folder, ChevronRight, ChevronLeft, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Database, Settings, Sun, Moon, LogOut, Palette, Package } from 'lucide-react';
+import { ProjectState, AssetLibraryItem, Character, Scene, Prop } from '../types';
+import { getAllProjectsMetadata, createNewProjectState, deleteProjectFromDB, fetchAssetLibraryPaginated, deleteAssetFromLibrary, loadProjectFromDB, saveProjectToDB, exportUserDataArchive, importUserDataArchive } from '../services/storageService';
 import { applyLibraryItemToProject } from '../services/assetLibraryService';
 import { useAlert } from './GlobalAlert';
 import { useTheme } from '../contexts/ThemeContext';
@@ -23,9 +23,13 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
   const [isLoading, setIsLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [libraryItems, setLibraryItems] = useState<AssetLibraryItem[]>([]);
-  const [isLibraryLoading, setIsLibraryLoading] = useState(true);
+  const [libraryTotal, setLibraryTotal] = useState(0);
+  const [libraryPage, setLibraryPage] = useState(1);
+  const [libraryPageSize] = useState(10);
+  const [libraryProjectOptions, setLibraryProjectOptions] = useState<{ id: string; name: string }[]>([]);
+  const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState('');
-  const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene'>('all');
+  const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene' | 'prop'>('all');
   const [libraryProjectFilter, setLibraryProjectFilter] = useState('all');
   const [assetToUse, setAssetToUse] = useState<AssetLibraryItem | null>(null);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
@@ -48,13 +52,19 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
     }
   };
 
-  const loadLibrary = async () => {
+  const fetchLibraryPage = async (page: number = 1) => {
     setIsLibraryLoading(true);
     try {
-      console.log('📦 [资产库-Dashboard] 正在加载资产库列表...');
-      const items = await getAllAssetLibraryItems();
-      console.log(`📦 [资产库-Dashboard] 已加载 ${items.length} 个资产`);
-      setLibraryItems(items);
+      const res = await fetchAssetLibraryPaginated({
+        page,
+        pageSize: libraryPageSize,
+        type: libraryFilter,
+        projectId: libraryProjectFilter === 'all' ? 'all' : libraryProjectFilter,
+      });
+      setLibraryItems(res.items);
+      setLibraryTotal(res.total);
+      setLibraryPage(res.page);
+      setLibraryProjectOptions(res.projectOptions || []);
     } catch (e) {
       console.error('❌ [资产库-Dashboard] 加载资产库失败:', e);
     } finally {
@@ -67,10 +77,9 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
   }, []);
 
   useEffect(() => {
-    if (showLibraryModal) {
-      loadLibrary();
-    }
-  }, [showLibraryModal]);
+    if (!showLibraryModal) return;
+    fetchLibraryPage(libraryPage);
+  }, [showLibraryModal, libraryPage, libraryFilter, libraryProjectFilter]);
 
   const handleCreate = () => {
     const newProject = createNewProjectState();
@@ -118,7 +127,11 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
       onConfirm: async () => {
         try {
           await deleteAssetFromLibrary(itemId);
-          setLibraryItems((prev) => prev.filter((item) => item.id !== itemId));
+          const nextTotal = Math.max(0, libraryTotal - 1);
+          const nextTotalPages = Math.max(1, Math.ceil(nextTotal / libraryPageSize));
+          const pageToShow = libraryPage > nextTotalPages ? nextTotalPages : libraryPage;
+          if (pageToShow !== libraryPage) setLibraryPage(pageToShow);
+          await fetchLibraryPage(pageToShow);
         } catch (error) {
           showAlert(`删除资产失败: ${error instanceof Error ? error.message : '未知错误'}`, { type: 'error' });
         }
@@ -143,22 +156,12 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
     return new Date(ts).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
   };
 
-  const projectNameOptions = Array.from(
-    new Set(
-      libraryItems.map((item) => (item.projectName && item.projectName.trim()) || '未知项目')
-    )
-  ).sort((a, b) => a.localeCompare(b, 'zh-CN'));
-
   const filteredLibraryItems = libraryItems.filter((item) => {
-    if (libraryFilter !== 'all' && item.type !== libraryFilter) return false;
-    if (libraryProjectFilter !== 'all') {
-      const projectName = (item.projectName && item.projectName.trim()) || '未知项目';
-      if (projectName !== libraryProjectFilter) return false;
-    }
     if (!libraryQuery.trim()) return true;
     const query = libraryQuery.trim().toLowerCase();
     return item.name.toLowerCase().includes(query);
   });
+  const totalPages = Math.max(1, Math.ceil(libraryTotal / libraryPageSize));
 
   const handleExportData = async () => {
     if (isDataExporting) return;
@@ -441,6 +444,8 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
               <button
                 onClick={() => {
                   setShowSettingsModal(false);
+                  setLibraryPage(1);
+                  setLibraryProjectFilter('all');
                   setShowLibraryModal(true);
                 }}
                 className="p-4 border border-[var(--border-primary)] hover:border-[var(--border-secondary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] transition-colors text-left"
@@ -520,7 +525,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                 </p>
               </div>
               <div className="text-[10px] text-[var(--text-muted)] font-mono uppercase tracking-widest">
-                {libraryItems.length} assets
+                共 {libraryTotal} 条，第 {libraryPage}/{totalPages} 页
               </div>
             </div>
 
@@ -537,29 +542,29 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
               <div className="min-w-[180px]">
                 <select
                   value={libraryProjectFilter}
-                  onChange={(e) => setLibraryProjectFilter(e.target.value)}
+                  onChange={(e) => { setLibraryProjectFilter(e.target.value); setLibraryPage(1); }}
                   className="w-full px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-secondary)]"
                 >
                   <option value="all">全部项目</option>
-                  {projectNameOptions.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  {libraryProjectOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="flex gap-2">
-                {(['all', 'character', 'scene'] as const).map((type) => (
+                {(['all', 'character', 'scene', 'prop'] as const).map((type) => (
                   <button
                     key={type}
-                    onClick={() => setLibraryFilter(type)}
+                    onClick={() => { setLibraryFilter(type); setLibraryPage(1); }}
                     className={`px-3 py-2 text-[10px] font-bold uppercase tracking-widest border rounded ${
                       libraryFilter === type
                         ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] border-[var(--btn-primary-bg)]'
                         : 'bg-transparent text-[var(--text-tertiary)] border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:border-[var(--border-secondary)]'
                     }`}
                   >
-                    {type === 'all' ? '全部' : type === 'character' ? '角色' : '场景'}
+                    {type === 'all' ? '全部' : type === 'character' ? '角色' : type === 'scene' ? '场景' : '道具'}
                   </button>
                 ))}
               </div>
@@ -574,12 +579,15 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                 暂无资产。可在项目的“角色与场景”中加入资产库。
               </div>
             ) : (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredLibraryItems.map((item) => {
                   const preview =
                     item.type === 'character'
                       ? (item.data as Character).referenceImage
-                      : (item.data as Scene).referenceImage;
+                      : item.type === 'scene'
+                        ? (item.data as Scene).referenceImage
+                        : (item.data as Prop).referenceImage;
                   return (
                     <div
                       key={item.id}
@@ -592,8 +600,10 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                           <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
                             {item.type === 'character' ? (
                               <Users className="w-8 h-8 opacity-30" />
-                            ) : (
+                            ) : item.type === 'scene' ? (
                               <MapPin className="w-8 h-8 opacity-30" />
+                            ) : (
+                              <Package className="w-8 h-8 opacity-30" />
                             )}
                           </div>
                         )}
@@ -602,7 +612,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                         <div>
                           <div className="text-sm text-[var(--text-primary)] font-bold line-clamp-1">{item.name}</div>
                           <div className="text-[10px] text-[var(--text-tertiary)] font-mono uppercase tracking-widest mt-1">
-                            {item.type === 'character' ? '角色' : '场景'}
+                            {item.type === 'character' ? '角色' : item.type === 'scene' ? '场景' : '道具'}
                           </div>
                           <div className="text-[10px] text-[var(--text-muted)] font-mono mt-1 line-clamp-1">
                             {(item.projectName && item.projectName.trim()) || '未知项目'}
@@ -628,6 +638,32 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                   );
                 })}
               </div>
+              {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-4">
+                  <button
+                    type="button"
+                    disabled={libraryPage <= 1 || isLibraryLoading}
+                    onClick={() => setLibraryPage((p) => Math.max(1, p - 1))}
+                    className="p-2 rounded border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="上一页"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-[var(--text-muted)] font-mono">
+                    {libraryPage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={libraryPage >= totalPages || isLibraryLoading}
+                    onClick={() => setLibraryPage((p) => Math.min(totalPages, p + 1))}
+                    className="p-2 rounded border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="下一页"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </div>
         </div>
