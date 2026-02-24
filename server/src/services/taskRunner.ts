@@ -520,10 +520,12 @@ const resolveReferenceImages = async (
     }
 
     // 内部 API URL → 先尝试文件系统，再查 DB
-    const apiMatch = img.match(/^\/api\/projects\/([^/]+)\/image\/([^/]+)\/([^/]+)$/);
+    const [cleanPath, queryStr] = img.split('?');
+    const apiMatch = cleanPath.match(/^\/api\/projects\/([^/]+)\/image\/([^/]+)\/([^/]+)$/);
     if (apiMatch) {
+      const srcEpisode = new URLSearchParams(queryStr || '').get('episode') || '_default';
       // 策略 1：从本地文件读取
-      const fromFile = resolveApiUrlToBase64(img);
+      const fromFile = resolveApiUrlToBase64(cleanPath, srcEpisode);
       if (fromFile) {
         console.log(`  📂 [TaskRunner] 参考图已从本地文件解析: ${img}`);
         resolved.push(fromFile);
@@ -532,7 +534,7 @@ const resolveReferenceImages = async (
 
       // 策略 2：从数据库读取
       if (userId != null) {
-        const fromDb = await resolveRefImageFromDb(pool, apiMatch[1], apiMatch[2], apiMatch[3], userId);
+        const fromDb = await resolveRefImageFromDb(pool, apiMatch[1], apiMatch[2], apiMatch[3], userId, srcEpisode);
         if (fromDb) {
           console.log(`  📂 [TaskRunner] 参考图已从数据库解析: ${img}`);
           resolved.push(fromDb);
@@ -559,37 +561,39 @@ const resolveRefImageFromDb = async (
   projectId: string,
   entityType: string,
   entityId: string,
-  userId: number
+  userId: number,
+  episodeId: string
 ): Promise<string | null> => {
   try {
+    const ep = (episodeId && String(episodeId).trim()) || '_default';
     let query: string;
     let imageColumn = 'reference_image';
     switch (entityType) {
       case 'character':
-        query = 'SELECT reference_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
+        query = 'SELECT reference_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?';
         break;
       case 'scene':
-        query = 'SELECT reference_image FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ?';
+        query = 'SELECT reference_image FROM script_scenes WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?';
         break;
       case 'prop':
-        query = 'SELECT reference_image FROM script_props WHERE id = ? AND project_id = ? AND user_id = ?';
+        query = 'SELECT reference_image FROM script_props WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?';
         break;
       case 'variation':
-        query = 'SELECT reference_image FROM character_variations WHERE id = ? AND project_id = ? AND user_id = ?';
+        query = 'SELECT reference_image FROM character_variations WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?';
         break;
       case 'turnaround':
-        query = 'SELECT turnaround_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ?';
+        query = 'SELECT turnaround_image FROM script_characters WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?';
         imageColumn = 'turnaround_image';
         break;
       case 'ninegrid':
-        query = 'SELECT nine_grid_image FROM shots WHERE id = ? AND project_id = ? AND user_id = ?';
+        query = 'SELECT nine_grid_image FROM shots WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?';
         imageColumn = 'nine_grid_image';
         break;
       default:
         return null;
     }
 
-    const [rows] = await pool.execute<RowDataPacket[]>(query!, [entityId, projectId, userId]);
+    const [rows] = await pool.execute<RowDataPacket[]>(query!, [entityId, projectId, userId, ep]);
     if (rows.length === 0 || !rows[0][imageColumn]) return null;
 
     let value = rows[0][imageColumn] as string;
@@ -881,19 +885,17 @@ const applyResultToProject = async (
   }
 
   // episode_id 用于精准定位数据（剧本级隔离）
-  const epId = episodeId || '';
-  const epFilter = epId ? ' AND episode_id = ?' : '';
-  const epParam = epId ? [epId] : [];
+  const epId = (episodeId && String(episodeId).trim()) || '_default';
 
   try {
     switch (target.type) {
       case 'keyframe':
         if (target.entityId && target.shotId) {
-          const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result, epId || undefined);
+          const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result, epId);
           await pool.execute(
             `UPDATE shot_keyframes SET image_url = ?, status = 'completed'
-             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?${epFilter}`,
-            [filePath, target.entityId, target.shotId, projectId, userId, ...epParam]
+             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+            [filePath, target.entityId, target.shotId, projectId, userId, epId]
           );
           console.log(`  📝 [TaskRunner] 关键帧已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
@@ -901,11 +903,11 @@ const applyResultToProject = async (
 
       case 'video_interval':
         if (target.entityId && target.shotId) {
-          const filePath = resolveToFilePath(projectId, 'video', target.entityId, base64Result, epId || undefined);
+          const filePath = resolveToFilePath(projectId, 'video', target.entityId, base64Result, epId);
           await pool.execute(
             `UPDATE shot_video_intervals SET video_url = ?, status = 'completed'
-             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ?${epFilter}`,
-            [filePath, target.entityId, target.shotId, projectId, userId, ...epParam]
+             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+            [filePath, target.entityId, target.shotId, projectId, userId, epId]
           );
           console.log(`  📝 [TaskRunner] 视频片段已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }
@@ -913,11 +915,11 @@ const applyResultToProject = async (
 
       case 'character_image':
         if (target.entityId) {
-          const filePath = resolveToFilePath(projectId, 'character', target.entityId, base64Result, epId || undefined);
+          const filePath = resolveToFilePath(projectId, 'character', target.entityId, base64Result, epId);
           await pool.execute(
             `UPDATE script_characters SET reference_image = ?, reference_image_url = ?, status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
-            [filePath, urlResult, target.entityId, projectId, userId, ...epParam]
+             WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+            [filePath, urlResult, target.entityId, projectId, userId, epId]
           );
           console.log(`  📝 [TaskRunner] 角色图片已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
@@ -925,11 +927,11 @@ const applyResultToProject = async (
 
       case 'scene_image':
         if (target.entityId) {
-          const filePath = resolveToFilePath(projectId, 'scene', target.entityId, base64Result, epId || undefined);
+          const filePath = resolveToFilePath(projectId, 'scene', target.entityId, base64Result, epId);
           await pool.execute(
             `UPDATE script_scenes SET reference_image = ?, reference_image_url = ?, status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
-            [filePath, urlResult, target.entityId, projectId, userId, ...epParam]
+             WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+            [filePath, urlResult, target.entityId, projectId, userId, epId]
           );
           console.log(`  📝 [TaskRunner] 场景图片已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
@@ -937,11 +939,11 @@ const applyResultToProject = async (
 
       case 'prop_image':
         if (target.entityId) {
-          const propFilePath = resolveToFilePath(projectId, 'prop', target.entityId, base64Result, epId || undefined);
+          const propFilePath = resolveToFilePath(projectId, 'prop', target.entityId, base64Result, epId);
           await pool.execute(
             `UPDATE script_props SET reference_image = ?, reference_image_url = ?, status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
-            [propFilePath, urlResult, target.entityId, projectId, userId, ...epParam]
+             WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+            [propFilePath, urlResult, target.entityId, projectId, userId, epId]
           );
           console.log(`  📝 [TaskRunner] 道具图片已回写: ${target.entityId} → ${propFilePath ? '文件' : 'null'}${urlResult ? ' (含原始URL)' : ''}`);
         }
@@ -949,11 +951,11 @@ const applyResultToProject = async (
 
       case 'turnaround':
         if (target.entityId) {
-          const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result, epId || undefined);
+          const filePath = resolveToFilePath(projectId, 'ninegrid', target.entityId, result, epId);
           await pool.execute(
             `UPDATE shots SET nine_grid_image = ?, nine_grid_status = 'completed'
-             WHERE id = ? AND project_id = ? AND user_id = ?${epFilter}`,
-            [filePath, target.entityId, projectId, userId, ...epParam]
+             WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+            [filePath, target.entityId, projectId, userId, epId]
           );
           console.log(`  📝 [TaskRunner] 九宫格已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }

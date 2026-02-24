@@ -140,14 +140,14 @@ const migrateExistingEpisodeIds = async (conn: mysql.PoolConnection): Promise<vo
   for (const table of tables) {
     try {
       const [needMigration] = await conn.execute<RowDataPacket[]>(
-        `SELECT COUNT(*) AS cnt FROM \`${table}\` WHERE episode_id = ''`,
+        `SELECT COUNT(*) AS cnt FROM \`${table}\` WHERE episode_id = '' OR episode_id IS NULL`,
       );
       if (needMigration[0]?.cnt > 0) {
         await conn.execute(
           `UPDATE \`${table}\` t
            INNER JOIN projects p ON t.project_id = p.id AND t.user_id = p.user_id
-           SET t.episode_id = COALESCE(p.selected_episode_id, '')
-           WHERE t.episode_id = ''`
+           SET t.episode_id = COALESCE(NULLIF(TRIM(p.selected_episode_id), ''), '_default')
+           WHERE t.episode_id = '' OR t.episode_id IS NULL`
         );
         console.log(`  🔄 已迁移 ${table} 中 ${needMigration[0].cnt} 条记录的 episode_id`);
       }

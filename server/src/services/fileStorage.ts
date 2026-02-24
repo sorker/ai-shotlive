@@ -2,9 +2,7 @@
  * 文件存储服务
  *
  * 将 base64 图片/视频数据保存为磁盘文件，数据库中只存储文件路径。
- *
- * 新路径格式（带 episodeId 隔离）：data/{projectId}/{episodeId}/{entityType}/{filename}
- * 旧路径格式（向后兼容）：data/{projectId}/{entityType}/{filename}
+ * 路径格式（必须）：data/{projectId}/{episodeId}/{entityType}/{filename}
  *
  * entityType:
  *   - character   → 角色参考图
@@ -75,15 +73,11 @@ function ensureDir(dirPath: string): void {
 }
 
 /**
- * 构建文件存储的相对目录路径
- * 有 episodeId 时：data/{projectId}/{episodeId}/{entityType}
- * 无 episodeId 时：data/{projectId}/{entityType}（向后兼容）
+ * 构建文件存储的相对目录路径（必须包含 episodeId）
+ * data/{projectId}/{episodeId}/{entityType}
  */
-function buildRelDir(projectId: string, entityType: string, episodeId?: string): string {
-  if (episodeId) {
-    return path.join('data', projectId, episodeId, entityType);
-  }
-  return path.join('data', projectId, entityType);
+function buildRelDir(projectId: string, entityType: string, episodeId: string): string {
+  return path.join('data', projectId, episodeId, entityType);
 }
 
 /**
@@ -93,7 +87,7 @@ function buildRelDir(projectId: string, entityType: string, episodeId?: string):
  * @param entityType 实体类型（character / scene / keyframe / video 等）
  * @param entityId   实体 ID（用作文件名）
  * @param dataUri    base64 data URI（data:image/png;base64,xxx）
- * @param episodeId  可选，剧本 ID（用于文件隔离）
+ * @param episodeId  剧本 ID（必须，用于文件隔离）
  * @returns 相对路径，如 "data/proj_xxx/ep_001/character/char-001.png"，失败返回 null
  */
 export function saveBase64ToFile(
@@ -101,7 +95,7 @@ export function saveBase64ToFile(
   entityType: string,
   entityId: string,
   dataUri: string,
-  episodeId?: string
+  episodeId: string
 ): string | null {
   const parsed = parseDataUri(dataUri);
   if (!parsed) return null;
@@ -145,14 +139,14 @@ export function extractBase64FromValue(val: string | null | undefined): string |
  * - 如果是 URL 或已有文件路径 → 原样返回
  * - null/undefined → 返回 null
  *
- * @param episodeId 可选，剧本 ID，用于按剧本隔离文件存储
+ * @param episodeId 剧本 ID（必须），用于按剧本隔离文件存储
  */
 export function resolveToFilePath(
   projectId: string | string[],
   entityType: string,
   entityId: string | string[],
   value: string | string[] | null | undefined,
-  episodeId?: string
+  episodeId: string
 ): string | null {
   const pid = Array.isArray(projectId) ? projectId[0] : projectId;
   const eid = Array.isArray(entityId) ? entityId[0] : entityId;
@@ -168,7 +162,7 @@ export function resolveToFilePath(
   // API 回退 URL → 解析并复制源文件到新实体路径（跨剧本/项目导入场景）
   if (val.startsWith('/api/')) {
     const [cleanPath, queryStr] = val.split('?');
-    const srcEpisode = new URLSearchParams(queryStr || '').get('episode') || undefined;
+    const srcEpisode = new URLSearchParams(queryStr || '').get('episode') || '';
     const fromFile = resolveApiUrlToBase64(cleanPath, srcEpisode);
     if (fromFile) {
       return saveBase64ToFile(pid, entityType, eid, fromFile, episodeId) || null;
@@ -229,35 +223,23 @@ export function readFileAsBuffer(filePath: string): { buffer: Buffer; mime: stri
 
 /**
  * 将内部 API URL（/api/projects/:id/image/:type/:eid）解析为 base64 data URI。
- * 通过文件系统直接读取本地存储的图片，无需 HTTP 请求或数据库查询。
+ * 通过文件系统直接读取，仅支持 data/{projectId}/{episodeId}/{entityType}/ 路径格式。
  *
  * @param url        不带 query 的 API 路径
- * @param episodeId  可选，先尝试按 episodeId 隔离路径查找，找不到时回退到旧路径
+ * @param episodeId  剧本 ID（空时用 _default）
  */
-export function resolveApiUrlToBase64(url: string, episodeId?: string): string | null {
+export function resolveApiUrlToBase64(url: string, episodeId: string): string | null {
   const match = url.match(/^\/api\/projects\/([^/]+)\/image\/([^/]+)\/([^/]+)$/);
   if (!match) return null;
 
   const [, projectId, entityType, entityId] = match;
   const safeEntityId = entityId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const exts = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+  const ep = episodeId && episodeId.trim() ? episodeId.trim() : '_default';
+  const epDir = path.join('data', projectId, ep, entityType);
 
-  // 优先在 episode 隔离路径查找
-  if (episodeId) {
-    const epDir = path.join('data', projectId, episodeId, entityType);
-    for (const ext of exts) {
-      const filePath = `${epDir}/${safeEntityId}${ext}`;
-      const fileData = readFileAsBuffer(filePath);
-      if (fileData) {
-        return `data:${fileData.mime};base64,${fileData.buffer.toString('base64')}`;
-      }
-    }
-  }
-
-  // 回退到旧路径（无 episode 隔离）
-  const dir = path.join('data', projectId, entityType);
   for (const ext of exts) {
-    const filePath = `${dir}/${safeEntityId}${ext}`;
+    const filePath = `${epDir}/${safeEntityId}${ext}`;
     const fileData = readFileAsBuffer(filePath);
     if (fileData) {
       return `data:${fileData.mime};base64,${fileData.buffer.toString('base64')}`;

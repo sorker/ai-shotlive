@@ -11,7 +11,9 @@
     "build:client": "vite build",
     "build:server": "tsc -p server/tsconfig.json",
     "start": "node server/dist/index.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "migrate:episode-ids": "tsx server/src/scripts/migrateEpisodeIds.ts",
+    "migrate:episode-paths": "tsx server/src/scripts/migrateToEpisodePaths.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

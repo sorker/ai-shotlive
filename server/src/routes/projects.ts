@@ -162,10 +162,13 @@ router.get('/:id/image/:entityType/:entityId', async (req: AuthRequest, res: Res
     const { id: projectId, entityType, entityId } = req.params;
     const userId = req.userId!;
     const episode = typeof req.query.episode === 'string' ? req.query.episode : '';
+    if (!episode) {
+      res.status(400).json({ error: '缺少 episode 参数，图片请求必须指定剧本 ID' });
+      return;
+    }
 
-    // episode 过滤：精确匹配剧本，隔离不同剧本的同 ID 实体
-    const epClause = episode ? ' AND episode_id = ?' : '';
-    const epParams = episode ? [episode] : [];
+    const epClause = ' AND episode_id = ?';
+    const epParams = [episode];
     // 非空图片过滤 + LIMIT 1（同 ID 可能存在于多个 episode）
     const imgNotNull = (col: string) => ` AND ${col} IS NOT NULL AND ${col} != ''`;
 
@@ -274,12 +277,14 @@ router.get('/:id/video/:videoId', async (req: AuthRequest, res: Response) => {
     const userId = req.userId!;
 
     const episode = typeof req.query.episode === 'string' ? req.query.episode : '';
-    const epClause = episode ? ' AND episode_id = ?' : '';
-    const epParams = episode ? [episode] : [];
+    if (!episode) {
+      res.status(400).json({ error: '缺少 episode 参数，视频请求必须指定剧本 ID' });
+      return;
+    }
 
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT video_url FROM shot_video_intervals WHERE id = ? AND project_id = ? AND user_id = ?${epClause}`,
-      [videoId, projectId, userId, ...epParams]
+      `SELECT video_url FROM shot_video_intervals WHERE id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
+      [videoId, projectId, userId, episode]
     );
     if (rows.length === 0 || !rows[0].video_url) {
       res.status(404).json({ error: '视频不存在' });

@@ -11,6 +11,7 @@ import { Router, Response } from 'express';
 import { getPool } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { resolveToFilePath } from '../services/fileStorage.js';
+import { resolveApiUrlToFilePath } from '../services/imageResolver.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -24,24 +25,40 @@ async function getActiveEpisodeId(pool: ReturnType<typeof getPool>, projectId: s
     'SELECT selected_episode_id FROM projects WHERE id = ? AND user_id = ?',
     [pid, userId]
   );
-  return rows[0]?.selected_episode_id || '';
+  const ep = rows[0]?.selected_episode_id;
+  return (ep && String(ep).trim()) ? String(ep).trim() : '_default';
 }
 
 /**
- * 预处理请求体中的图片字段：base64 → 保存为文件，返回文件路径
+ * 预处理请求体中的图片字段：base64 / API URL → 保存为文件，返回文件路径
+ * API URL 时优先从数据库解析（支持 base64 存储的旧数据），再回退到文件系统
  */
-function resolveBodyImages(
+async function resolveBodyImages(
+  pool: ReturnType<typeof getPool>,
+  userId: number,
   body: Record<string, any>,
   projectId: string | string[],
   entityType: string,
   entityId: string | string[],
   imageFields: string[] = ['referenceImage'],
-  episodeId?: string
-): void {
+  episodeId: string
+): Promise<void> {
+  const pid = Array.isArray(projectId) ? projectId[0] : projectId;
+  const eid = Array.isArray(entityId) ? entityId[0] : entityId;
+  const ep = (episodeId && String(episodeId).trim()) || '_default';
+
   for (const field of imageFields) {
-    if (body[field] !== undefined && body[field] !== null) {
-      body[field] = resolveToFilePath(projectId, entityType, entityId, body[field], episodeId);
+    const val = body[field];
+    if (val === undefined || val === null) continue;
+
+    if (typeof val === 'string' && val.startsWith('/api/')) {
+      const resolved = await resolveApiUrlToFilePath(pool, userId, pid, entityType, eid, val, ep);
+      if (resolved) {
+        body[field] = resolved;
+        continue;
+      }
     }
+    body[field] = resolveToFilePath(projectId, entityType, entityId, val, ep);
   }
 }
 
@@ -203,8 +220,7 @@ router.patch('/:id/characters/:charId', async (req: AuthRequest, res: Response) 
 
   try {
     const episodeId = await getActiveEpisodeId(pool, projectId, userId);
-    // base64 图片 → 保存为文件
-    resolveBodyImages(req.body, projectId, 'character', charId, ['referenceImage'], episodeId);
+    await resolveBodyImages(pool, userId, req.body, projectId, 'character', charId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, CHARACTER_FIELDS);
 
     // turnaround 特殊处理
@@ -334,7 +350,7 @@ router.patch('/:id/characters/:charId/variations/:varId', async (req: AuthReques
 
   try {
     const episodeId = await getActiveEpisodeId(pool, projectId, userId);
-    resolveBodyImages(req.body, projectId, 'variation', varId, ['referenceImage'], episodeId);
+    await resolveBodyImages(pool, userId, req.body, projectId, 'variation', varId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, VARIATION_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -429,7 +445,7 @@ router.patch('/:id/scenes/:sceneId', async (req: AuthRequest, res: Response) => 
 
   try {
     const episodeId = await getActiveEpisodeId(pool, projectId, userId);
-    resolveBodyImages(req.body, projectId, 'scene', sceneId, ['referenceImage'], episodeId);
+    await resolveBodyImages(pool, userId, req.body, projectId, 'scene', sceneId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, SCENE_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -523,7 +539,7 @@ router.patch('/:id/props/:propId', async (req: AuthRequest, res: Response) => {
 
   try {
     const episodeId = await getActiveEpisodeId(pool, projectId, userId);
-    resolveBodyImages(req.body, projectId, 'prop', propId, ['referenceImage'], episodeId);
+    await resolveBodyImages(pool, userId, req.body, projectId, 'prop', propId, ['referenceImage'], episodeId);
     const { sets, values } = buildPatchSets(req.body, PROP_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -741,7 +757,7 @@ router.patch('/:id/shots/:shotId/keyframes/:kfId', async (req: AuthRequest, res:
 
   try {
     const episodeId = await getActiveEpisodeId(pool, projectId, userId);
-    resolveBodyImages(req.body, projectId, 'keyframe', kfId, ['imageUrl'], episodeId);
+    await resolveBodyImages(pool, userId, req.body, projectId, 'keyframe', kfId, ['imageUrl'], episodeId);
     const { sets, values } = buildPatchSets(req.body, KEYFRAME_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });
@@ -780,7 +796,7 @@ router.patch('/:id/shots/:shotId/videos/:videoId', async (req: AuthRequest, res:
 
   try {
     const episodeId = await getActiveEpisodeId(pool, projectId, userId);
-    resolveBodyImages(req.body, projectId, 'video', videoId, ['videoUrl'], episodeId);
+    await resolveBodyImages(pool, userId, req.body, projectId, 'video', videoId, ['videoUrl'], episodeId);
     const { sets, values } = buildPatchSets(req.body, VIDEO_INTERVAL_FIELDS);
     if (sets.length === 0) {
       res.status(400).json({ error: '没有提供可更新的字段' });

@@ -287,8 +287,8 @@ export async function saveProjectNormalized(
     );
   }
 
-  // 剧本级数据隔离：使用当前选中的 episodeId
-  const episodeId = project.selectedEpisodeId || '';
+  // 剧本级数据隔离：使用当前选中的 episodeId，空时用 _default
+  const episodeId = (project.selectedEpisodeId && String(project.selectedEpisodeId).trim()) || '_default';
 
   // 辅助：解析图片/视频值，base64 保存为文件，返回文件路径或 URL
   const resolveImageValue = (
@@ -298,14 +298,14 @@ export async function saveProjectNormalized(
     entityId: string,
   ): string | null => {
     if (frontendVal && isBase64DataUri(frontendVal)) {
-      return resolveToFilePath(pid, entityType, entityId, frontendVal, episodeId || undefined);
+      return resolveToFilePath(pid, entityType, entityId, frontendVal, episodeId);
     }
     if (frontendVal && (frontendVal.startsWith('http') || isFilePath(frontendVal))) {
       return frontendVal;
     }
     if (cachedVal) {
       if (isBase64DataUri(cachedVal)) {
-        return resolveToFilePath(pid, entityType, entityId, cachedVal, episodeId || undefined);
+        return resolveToFilePath(pid, entityType, entityId, cachedVal, episodeId);
       }
       return cachedVal;
     }
@@ -333,7 +333,7 @@ export async function saveProjectNormalized(
         resolveImageValue(ch.referenceImage, prevCharImg.get(ch.id), 'character', ch.id),
         ch.referenceImageUrl || null,
         turnaroundMeta ? JSON.stringify(turnaroundMeta) : null,
-        resolveToFilePath(pid, 'turnaround', ch.id, ch.turnaround?.imageUrl, episodeId || undefined) || null,
+        resolveToFilePath(pid, 'turnaround', ch.id, ch.turnaround?.imageUrl, episodeId) || null,
         ch.status || null,
         i,
       ]
@@ -416,7 +416,7 @@ export async function saveProjectNormalized(
         JSON.stringify(shot.props || []),
         shot.videoModel || null,
         ng?.panels ? JSON.stringify(ng.panels) : null,
-        resolveToFilePath(pid, 'ninegrid', shot.id, ng?.imageUrl, episodeId || undefined) || null,
+        resolveToFilePath(pid, 'ninegrid', shot.id, ng?.imageUrl, episodeId) || null,
         ng?.prompt || null,
         ng?.status || null,
         i,
@@ -436,7 +436,7 @@ export async function saveProjectNormalized(
     // 视频片段
     if (shot.interval) {
       const iv = shot.interval;
-      const videoVal = resolveToFilePath(pid, 'video', iv.id, iv.videoUrl, episodeId || undefined);
+      const videoVal = resolveToFilePath(pid, 'video', iv.id, iv.videoUrl, episodeId);
       await conn.execute(
         `INSERT INTO shot_video_intervals
          (id, shot_id, project_id, user_id, episode_id, start_keyframe_id, end_keyframe_id,
@@ -539,12 +539,11 @@ export async function loadProjectNormalized(
     ? 'SELECT * FROM novel_episodes WHERE project_id = ? AND user_id = ?'
     : 'SELECT id, name, chapter_ids, chapter_range, status, episode_created_at, episode_updated_at, CHAR_LENGTH(script) AS script_length FROM novel_episodes WHERE project_id = ? AND user_id = ?';
 
-  // 剧本级数据隔离：如果有选中的剧集，下游数据只加载该剧集的数据
-  // 导出时（includeFullContent）加载全部数据
+  // 剧本级数据隔离：始终按 episode_id 加载，无选中剧本时用 _default
   const activeEpisodeId = meta.selected_episode_id || '';
-  const hasActiveEpisode = !!meta.selected_episode_id;
-  const episodeFilter = !includeFullContent && hasActiveEpisode ? ' AND episode_id = ?' : '';
-  const episodeParams = !includeFullContent && hasActiveEpisode ? [activeEpisodeId] : [];
+  const effectiveEpisodeId = activeEpisodeId || '_default';
+  const episodeFilter = !includeFullContent ? ' AND episode_id = ?' : '';
+  const episodeParams = !includeFullContent ? [effectiveEpisodeId] : [];
 
   const [
     [chapterRows],
@@ -615,9 +614,8 @@ export async function loadProjectNormalized(
       }
   );
 
-  // 构建图片回退 URL 前缀（用于将 base64 替换为服务端 API URL）
-  // 带 episode 参数以精确隔离不同剧本的同 ID 实体
-  const epQuery = activeEpisodeId ? `?episode=${activeEpisodeId}` : '';
+  // 构建图片回退 URL 前缀（必须带 episode 参数）
+  const epQuery = `?episode=${effectiveEpisodeId}`;
   const imgBase = `/api/projects/${projectId}/image`;
 
   // ── 组装角色变体（按角色分组）──

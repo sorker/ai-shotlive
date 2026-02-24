@@ -60,8 +60,10 @@ async function migrate() {
   for (const target of TARGETS) {
     console.log(`── 处理 ${target.table}.${target.imageColumn} (${target.entityType}) ──`);
 
+    const hasEpisode = ['script_characters', 'character_variations', 'script_scenes', 'script_props', 'shot_keyframes', 'shot_video_intervals', 'shots'].includes(target.table);
+    const episodeCol = hasEpisode ? ', episode_id' : '';
     const [rows] = await pool.execute<mysql.RowDataPacket[]>(
-      `SELECT ${target.idColumn} AS entity_id, ${target.projectIdColumn} AS project_id, ${target.imageColumn} AS value
+      `SELECT ${target.idColumn} AS entity_id, ${target.projectIdColumn} AS project_id ${episodeCol}, ${target.imageColumn} AS value
        FROM ${target.table}
        WHERE ${target.imageColumn} IS NOT NULL AND ${target.imageColumn} != ''`
     );
@@ -72,6 +74,7 @@ async function migrate() {
 
     for (const row of rows) {
       const { entity_id, project_id, value } = row;
+      const episodeId = hasEpisode ? ((row as any).episode_id && String((row as any).episode_id).trim()) || '_default' : '_default';
 
       // 提取 base64（处理 JSON 脏数据）
       let base64Val = value;
@@ -91,11 +94,13 @@ async function migrate() {
       }
 
       try {
-        const filePath = resolveToFilePath(project_id, target.entityType, entity_id, base64Val);
+        const filePath = resolveToFilePath(project_id, target.entityType, entity_id, base64Val, episodeId);
         if (filePath && filePath !== base64Val) {
+          const whereEpisode = hasEpisode ? ` AND episode_id = ?` : '';
+          const whereParams = hasEpisode ? [filePath, entity_id, project_id, (row as any).episode_id || '_default'] : [filePath, entity_id, project_id];
           await pool.execute(
-            `UPDATE ${target.table} SET ${target.imageColumn} = ? WHERE ${target.idColumn} = ? AND ${target.projectIdColumn} = ?`,
-            [filePath, entity_id, project_id]
+            `UPDATE ${target.table} SET ${target.imageColumn} = ? WHERE ${target.idColumn} = ? AND ${target.projectIdColumn} = ?${whereEpisode}`,
+            whereParams
           );
           migrated++;
           if (migrated <= 3) {
