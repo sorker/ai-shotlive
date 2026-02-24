@@ -1,5 +1,6 @@
 /**
  * 视频剪辑器 - 时间轴
+ * 注：react-beautiful-dnd 对 isDropDisabled 有严格校验，必须传明确布尔值
  */
 import React, { useCallback, useEffect } from 'react';
 import { DragDropContext, Draggable, Droppable, DropResult } from 'react-beautiful-dnd';
@@ -9,6 +10,8 @@ import { formatTime } from './utils';
 import TrackFragment from './TrackFragment';
 import { SCALE_DOM_SPACE_EXPORT } from './VideoEditorStore';
 import { useAlert } from '../../GlobalAlert';
+
+/** react-beautiful-dnd 要求 isDropDisabled、isCombineEnabled 必须为明确布尔值，不能为 undefined */
 
 interface TimelineProps {
   store: VideoEditorStore;
@@ -43,7 +46,7 @@ const Timeline: React.FC<TimelineProps> = ({ store, refresh, onRefresh }) => {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, h * ratio);
       ctx.stroke();
-      if (i % 10 === 0 && i > 0) {
+      if (i % 10 === 0) {
         ctx.fillStyle = 'var(--text-muted)';
         ctx.font = `${10 * ratio}px monospace`;
         ctx.fillText(`${(i / store.timerScale / 10).toFixed(1)}s`, x + 2, 24 * ratio);
@@ -57,7 +60,7 @@ const Timeline: React.FC<TimelineProps> = ({ store, refresh, onRefresh }) => {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
       const x = e.clientX - rect.left;
-      const time = (x / SCALE_DOM_SPACE_EXPORT) * (1000 / store.timerScale);
+      const time = Math.max(0, (x / SCALE_DOM_SPACE_EXPORT) * (1000 / store.timerScale));
       store.setCurrentTime(time);
       store.pause();
       lastX.current = { x: e.clientX, moving: true };
@@ -97,18 +100,28 @@ const Timeline: React.FC<TimelineProps> = ({ store, refresh, onRefresh }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [store, onRefresh]);
 
+  const onDragStart = useCallback(() => {
+    store.pause();
+    // 不在拖拽期间调用 onRefresh，避免触发重渲染导致 "add or remove Draggable during drag"
+  }, [store]);
+
   const onDragEnd = useCallback(
     (result: DropResult) => {
       if (!result.destination) return;
-      if (result.source.droppableId === result.destination.droppableId) {
-        store.exchangeItems(result.source.droppableId, result.source.index, result.destination.index);
-      }
+      store.exchangeItems(
+        result.source.droppableId,
+        result.source.index,
+        result.destination.droppableId,
+        result.destination.index
+      );
       onRefresh();
     },
     [store, onRefresh]
   );
 
-  const indicatorLeft = (store.currentTime / 1000) * store.timerScale * SCALE_DOM_SPACE_EXPORT;
+  const contentWidth = lines.length * SCALE_DOM_SPACE_EXPORT;
+  const labelWidth = 96 + 8; // w-24 (6rem) + gap-2
+  const indicatorLeft = labelWidth + (store.currentTime / 1000) * store.timerScale * SCALE_DOM_SPACE_EXPORT;
 
   return (
     <div className="flex flex-col bg-[var(--bg-surface)] border border-[var(--border-primary)] rounded-xl overflow-hidden">
@@ -208,20 +221,27 @@ const Timeline: React.FC<TimelineProps> = ({ store, refresh, onRefresh }) => {
         </div>
       </div>
 
-      {/* 时间刻度 + 轨道 */}
-      <DragDropContext onDragEnd={onDragEnd}>
-      <div className="overflow-x-auto overflow-y-auto max-h-[240px]">
-        <div className="min-w-max">
+      {/* 时间刻度 + 轨道（时间轴与轨道对齐，指示线跨越多轨道） */}
+      <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <div className="overflow-x-auto overflow-y-auto max-h-[280px] relative">
+        <div className="min-w-max" style={{ minWidth: labelWidth + contentWidth }}>
+          {/* 时间刻度行：与轨道名称同宽，增加「时间」标签 */}
           <div
-            className="relative h-12 cursor-ew-resize"
+            className="flex items-center gap-2 py-1.5 px-2 border-b border-[var(--border-subtle)] h-12 cursor-ew-resize"
             onMouseDown={onIndicatorMouseDown}
           >
-            <canvas ref={canvasRef} className="block" />
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-[var(--accent)] pointer-events-none"
-              style={{ left: indicatorLeft }}
-            />
+            <div className="w-24 flex-shrink-0 flex items-center">
+              <span className="text-[10px] text-[var(--text-muted)] font-medium">时间</span>
+            </div>
+            <div className="flex-1 relative min-h-[32px]" style={{ minWidth: contentWidth }}>
+              <canvas ref={canvasRef} className="block" style={{ width: contentWidth, height: 32 }} />
+            </div>
           </div>
+          {/* 跨轨道指示线：点击时间轴后显示，贯穿所有轨道 */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-[var(--accent)] pointer-events-none z-10"
+            style={{ left: indicatorLeft }}
+          />
           {store.layers.map((layer) => (
             <div
               key={layer.id}
@@ -241,26 +261,30 @@ const Timeline: React.FC<TimelineProps> = ({ store, refresh, onRefresh }) => {
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>
-              <Droppable droppableId={layer.id} direction="horizontal">
+              <Droppable droppableId={layer.id} direction="horizontal" isDropDisabled={false} isCombineEnabled={false}>
                 {(provided) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className="flex items-center gap-1 flex-1 min-h-[44px] bg-[var(--bg-sunken)]/50 rounded-lg px-2"
+                    style={{ minWidth: contentWidth }}
                   >
                     {layer.items.map((item, idx) => (
                       <Draggable key={item.id} draggableId={item.id} index={idx}>
                         {(p) => (
                           <TrackFragment
                             item={item}
+                            layerId={layer.id}
                             store={store}
                             onSelect={() => {
                               store.setActiveItem(item.id);
                               onRefresh();
                             }}
+                            onRefresh={onRefresh}
                             draggableProps={p.draggableProps}
                             dragHandleProps={p.dragHandleProps}
                             innerRef={p.innerRef}
+                            isDragging={p.isDragging}
                           />
                         )}
                       </Draggable>

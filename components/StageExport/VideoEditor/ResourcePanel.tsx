@@ -13,6 +13,7 @@ import {
   Music,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Loader2,
   Plus,
 } from 'lucide-react';
@@ -21,6 +22,14 @@ import { VideoEditorStore } from './VideoEditorStore';
 import { createItem, ItemType } from './types';
 import { useAlert } from '../../GlobalAlert';
 
+export type ResourcePreviewItem = {
+  type: 'video' | 'image' | 'audio' | 'text';
+  url?: string;
+  content?: string;
+  title: string;
+  duration?: number;
+};
+
 interface ResourcePanelProps {
   project: ProjectState;
   store: VideoEditorStore;
@@ -28,6 +37,10 @@ interface ResourcePanelProps {
   onShowModelConfig: () => void;
   onAIGenerateSubtitle: (text: string) => Promise<string | null>;
   onAIGenerateAudio: (text: string) => Promise<{ url: string; duration: number } | null>;
+  selectedResource: ResourcePreviewItem | null;
+  onSelectResource: (r: ResourcePreviewItem | null) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 type ResourceTab = 'script' | 'characters' | 'scenes' | 'videos' | 'uploaded' | 'ai_subtitles' | 'ai_audio';
@@ -39,6 +52,10 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
   onShowModelConfig,
   onAIGenerateSubtitle,
   onAIGenerateAudio,
+  selectedResource,
+  onSelectResource,
+  collapsed = false,
+  onToggleCollapse,
 }) => {
   const { showAlert } = useAlert();
   const [activeTab, setActiveTab] = useState<ResourceTab>('videos');
@@ -69,10 +86,35 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
     onRefresh();
   };
 
+  const selectForPreview = (r: ResourcePreviewItem) => {
+    onSelectResource(r);
+  };
+
+  if (collapsed) {
+    return (
+      <div className="w-10 flex-shrink-0 flex flex-col bg-[var(--bg-surface)] border border-[var(--border-primary)] rounded-xl overflow-hidden">
+        <button
+          onClick={onToggleCollapse}
+          className="flex-1 flex items-center justify-center hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+          title="展开资源库"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-56 flex-shrink-0 flex flex-col bg-[var(--bg-surface)] border border-[var(--border-primary)] rounded-xl overflow-hidden">
-      <div className="h-10 flex items-center px-3 border-b border-[var(--border-primary)]">
+      <div className="h-10 flex items-center justify-between px-3 border-b border-[var(--border-primary)]">
         <span className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">资源库</span>
+        <button
+          onClick={onToggleCollapse}
+          className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+          title="收起资源库"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto">
         {[
@@ -97,19 +139,32 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
               <div className="px-3 pb-3 space-y-1">
                 {id === 'script' && (
                   <>
-                    {project.shots?.map((shot, i) => (
-                      <div
-                        key={shot.id}
-                        className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer text-[10px]"
-                        onClick={() => {
-                          const text = shot.dialogue || shot.actionSummary || '';
-                          if (text) addToTrack({ type: ItemType.TEXT, content: text, title: `镜头${i + 1}`, duration: 4000 }, 'text');
-                        }}
-                      >
-                        <span className="text-[var(--text-muted)]">#{i + 1}</span>
-                        <span className="truncate flex-1">{shot.actionSummary?.slice(0, 20)}</span>
-                      </div>
-                    ))}
+                    {project.shots?.map((shot, i) => {
+                      const text = shot.dialogue || shot.actionSummary || '';
+                      return (
+                        <div
+                          key={shot.id}
+                          className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item"
+                        >
+                          <div
+                            className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer text-[10px]"
+                            onClick={() => text && selectForPreview({ type: 'text', content: text, title: `镜头${i + 1}`, duration: 4000 })}
+                          >
+                            <span className="text-[var(--text-muted)]">#{i + 1}</span>
+                            <span className="truncate flex-1">{shot.actionSummary?.slice(0, 20)}</span>
+                          </div>
+                          {text && (
+                            <button
+                              onClick={() => addToTrack({ type: ItemType.TEXT, content: text, title: `镜头${i + 1}`, duration: 4000 }, 'text')}
+                              className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                              title="添加到轨道"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                     {(!project.shots || project.shots.length === 0) && (
                       <p className="text-[10px] text-[var(--text-muted)]">暂无镜头</p>
                     )}
@@ -117,24 +172,33 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
                 )}
                 {id === 'characters' && (
                   <>
-                    {project.scriptData?.characters?.map((ch) => (
-                      <div
-                        key={ch.id}
-                        className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer"
-                        onClick={() => {
-                          const url = ch.referenceImage || ch.referenceImageUrl;
-                          if (url) addToTrack({ type: ItemType.IMAGE, url, title: ch.name, duration: 5000 }, 'image');
-                          else showAlert('该角色暂无参考图', { type: 'warning' });
-                        }}
-                      >
-                        {ch.referenceImage || ch.referenceImageUrl ? (
-                          <img src={ch.referenceImage || ch.referenceImageUrl} alt="" className="w-8 h-8 rounded object-cover" />
-                        ) : (
-                          <div className="w-8 h-8 rounded bg-[var(--bg-sunken)] flex items-center justify-center text-[10px]">?</div>
-                        )}
-                        <span className="text-xs truncate">{ch.name}</span>
-                      </div>
-                    ))}
+                    {project.scriptData?.characters?.map((ch) => {
+                      const url = ch.referenceImage || ch.referenceImageUrl;
+                      return (
+                        <div key={ch.id} className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item">
+                          <div
+                            className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
+                            onClick={() => url ? selectForPreview({ type: 'image', url, title: ch.name, duration: 5000 }) : showAlert('该角色暂无参考图', { type: 'warning' })}
+                          >
+                            {url ? (
+                              <img src={url} alt="" className="w-8 h-8 rounded object-cover" />
+                            ) : (
+                              <div className="w-8 h-8 rounded bg-[var(--bg-sunken)] flex items-center justify-center text-[10px]">?</div>
+                            )}
+                            <span className="text-xs truncate">{ch.name}</span>
+                          </div>
+                          {url && (
+                            <button
+                              onClick={() => addToTrack({ type: ItemType.IMAGE, url, title: ch.name, duration: 5000 }, 'image')}
+                              className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                              title="添加到轨道"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                     {(!project.scriptData?.characters || project.scriptData.characters.length === 0) && (
                       <p className="text-[10px] text-[var(--text-muted)]">暂无角色</p>
                     )}
@@ -142,24 +206,33 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
                 )}
                 {id === 'scenes' && (
                   <>
-                    {project.scriptData?.scenes?.map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer"
-                        onClick={() => {
-                          const url = s.referenceImage || s.referenceImageUrl;
-                          if (url) addToTrack({ type: ItemType.IMAGE, url, title: s.location, duration: 5000 }, 'image');
-                          else showAlert('该场景暂无参考图', { type: 'warning' });
-                        }}
-                      >
-                        {s.referenceImage || s.referenceImageUrl ? (
-                          <img src={s.referenceImage || s.referenceImageUrl} alt="" className="w-8 h-8 rounded object-cover" />
-                        ) : (
-                          <div className="w-8 h-8 rounded bg-[var(--bg-sunken)] flex items-center justify-center text-[10px]">?</div>
-                        )}
-                        <span className="text-xs truncate">{s.location}</span>
-                      </div>
-                    ))}
+                    {project.scriptData?.scenes?.map((s) => {
+                      const url = s.referenceImage || s.referenceImageUrl;
+                      return (
+                        <div key={s.id} className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item">
+                          <div
+                            className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
+                            onClick={() => url ? selectForPreview({ type: 'image', url, title: s.location, duration: 5000 }) : showAlert('该场景暂无参考图', { type: 'warning' })}
+                          >
+                            {url ? (
+                              <img src={url} alt="" className="w-8 h-8 rounded object-cover" />
+                            ) : (
+                              <div className="w-8 h-8 rounded bg-[var(--bg-sunken)] flex items-center justify-center text-[10px]">?</div>
+                            )}
+                            <span className="text-xs truncate">{s.location}</span>
+                          </div>
+                          {url && (
+                            <button
+                              onClick={() => addToTrack({ type: ItemType.IMAGE, url, title: s.location, duration: 5000 }, 'image')}
+                              className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                              title="添加到轨道"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                     {(!project.scriptData?.scenes || project.scriptData.scenes.length === 0) && (
                       <p className="text-[10px] text-[var(--text-muted)]">暂无场景</p>
                     )}
@@ -167,20 +240,28 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
                 )}
                 {id === 'videos' && (
                   <>
-                    {project.shots?.filter((s) => s.interval?.videoUrl).map((shot, i) => (
-                      <div
-                        key={shot.id}
-                        className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer"
-                        onClick={() => {
-                          const url = shot.interval!.videoUrl!;
-                          const dur = (shot.interval!.duration || 10) * 1000;
-                          addToTrack({ type: ItemType.VIDEO, url, title: `镜头${i + 1}`, duration: dur }, 'video');
-                        }}
-                      >
-                        <Video className="w-4 h-4 text-[var(--text-muted)]" />
-                        <span className="text-xs truncate">镜头 {i + 1}</span>
-                      </div>
-                    ))}
+                    {project.shots?.filter((s) => s.interval?.videoUrl).map((shot, i) => {
+                      const url = shot.interval!.videoUrl!;
+                      const dur = (shot.interval!.duration || 10) * 1000;
+                      return (
+                        <div key={shot.id} className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item">
+                          <div
+                            className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
+                            onClick={() => selectForPreview({ type: 'video', url, title: `镜头${i + 1}`, duration: dur })}
+                          >
+                            <Video className="w-4 h-4 text-[var(--text-muted)]" />
+                            <span className="text-xs truncate">镜头 {i + 1}</span>
+                          </div>
+                          <button
+                            onClick={() => addToTrack({ type: ItemType.VIDEO, url, title: `镜头${i + 1}`, duration: dur }, 'video')}
+                            className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                            title="添加到轨道"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                     {(!project.shots || project.shots.filter((s) => s.interval?.videoUrl).length === 0) && (
                       <p className="text-[10px] text-[var(--text-muted)]">暂无视频</p>
                     )}
@@ -220,21 +301,30 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
                         setIsUploading(false);
                       }}
                     />
-                    {store.uploadedResources.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer"
-                        onClick={() => {
-  const layerType = r.type === ItemType.TEXT ? 'text' : r.type === ItemType.VIDEO ? 'video' : r.type === ItemType.IMAGE ? 'image' : 'audio';
-  addToTrack({ type: r.type, url: r.url, title: r.title, duration: r.duration ?? 5000 }, layerType);
-}}
-                      >
-                        {r.type === ItemType.IMAGE && <img src={r.url} alt="" className="w-8 h-8 rounded object-cover" />}
-                        {r.type === ItemType.VIDEO && <Video className="w-4 h-4" />}
-                        {r.type === ItemType.MUSIC && <Music className="w-4 h-4" />}
-                        <span className="text-xs truncate">{r.title}</span>
-                      </div>
-                    ))}
+                    {store.uploadedResources.map((r) => {
+                      const layerType = r.type === ItemType.TEXT ? 'text' : r.type === ItemType.VIDEO ? 'video' : r.type === ItemType.IMAGE ? 'image' : 'audio';
+                      const previewType = r.type === ItemType.VIDEO ? 'video' : r.type === ItemType.IMAGE ? 'image' : r.type === ItemType.MUSIC ? 'audio' : 'text';
+                      return (
+                        <div key={r.id} className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item">
+                          <div
+                            className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
+                            onClick={() => selectForPreview({ type: previewType, url: r.url, title: r.title, duration: r.duration ?? 5000 })}
+                          >
+                            {r.type === ItemType.IMAGE && <img src={r.url} alt="" className="w-8 h-8 rounded object-cover" />}
+                            {r.type === ItemType.VIDEO && <Video className="w-4 h-4" />}
+                            {r.type === ItemType.MUSIC && <Music className="w-4 h-4" />}
+                            <span className="text-xs truncate">{r.title}</span>
+                          </div>
+                          <button
+                            onClick={() => addToTrack({ type: r.type, url: r.url, title: r.title, duration: r.duration ?? 5000 }, layerType)}
+                            className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                            title="添加到轨道"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                     {store.uploadedResources.length === 0 && !isUploading && (
                       <p className="text-[10px] text-[var(--text-muted)]">暂无上传</p>
                     )}
@@ -264,12 +354,20 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
                       AI 生成字幕
                     </button>
                     {store.aiSubtitleResources.map((r) => (
-                      <div
-                        key={r.id}
-                        className="p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer text-[10px]"
-                        onClick={() => addToTrack({ type: ItemType.TEXT, content: r.content, title: r.content.slice(0, 6), duration: r.duration ?? 4000 }, 'text')}
-                      >
-                        {r.content.slice(0, 30)}…
+                      <div key={r.id} className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item">
+                        <div
+                          className="flex-1 min-w-0 cursor-pointer text-[10px]"
+                          onClick={() => selectForPreview({ type: 'text', content: r.content, title: r.content.slice(0, 6), duration: r.duration ?? 4000 })}
+                        >
+                          {r.content.slice(0, 30)}…
+                        </div>
+                        <button
+                          onClick={() => addToTrack({ type: ItemType.TEXT, content: r.content, title: r.content.slice(0, 6), duration: r.duration ?? 4000 }, 'text')}
+                          className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                          title="添加到轨道"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ))}
                     {store.aiSubtitleResources.length === 0 && !isGenSubtitle && (
@@ -301,13 +399,21 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({
                       AI 生成音频
                     </button>
                     {store.aiAudioResources.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] cursor-pointer"
-                        onClick={() => addToTrack({ type: ItemType.MUSIC, url: r.url, title: r.title, duration: r.duration ?? 5000 }, 'audio')}
-                      >
-                        <Music className="w-4 h-4" />
-                        <span className="text-xs truncate">{r.title}</span>
+                      <div key={r.id} className="flex items-center gap-2 p-2 rounded bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] group/item">
+                        <div
+                          className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
+                          onClick={() => selectForPreview({ type: 'audio', url: r.url, title: r.title, duration: r.duration ?? 5000 })}
+                        >
+                          <Music className="w-4 h-4" />
+                          <span className="text-xs truncate">{r.title}</span>
+                        </div>
+                        <button
+                          onClick={() => addToTrack({ type: ItemType.MUSIC, url: r.url, title: r.title, duration: r.duration ?? 5000 }, 'audio')}
+                          className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-[var(--accent-bg)] text-[var(--accent-text)]"
+                          title="添加到轨道"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ))}
                     {store.aiAudioResources.length === 0 && !isGenAudio && (

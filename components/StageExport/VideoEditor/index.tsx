@@ -4,6 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Sparkles, Type, Cloud, CloudOff, Download, Loader2 } from 'lucide-react';
+import ResourcePreview from './ResourcePreview';
 import { ProjectState } from '../../../types';
 import { VideoEditorStore } from './VideoEditorStore';
 import Player from './Player';
@@ -33,6 +34,14 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ project, onClose, onShowModel
   const { showAlert } = useAlert();
   const [refresh, setRefresh] = useState(Symbol(1));
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [selectedResource, setSelectedResource] = useState<{
+    type: 'video' | 'image' | 'audio' | 'text';
+    url?: string;
+    content?: string;
+    title: string;
+    duration?: number;
+  } | null>(null);
+  const [resourcePanelCollapsed, setResourcePanelCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [serverVersion, setServerVersion] = useState(0);
   const store = useMemo(() => new VideoEditorStore(), []);
@@ -130,6 +139,24 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ project, onClose, onShowModel
       return null;
     }
   }, [showAlert, onShowModelConfig]);
+
+  const handleAddResourceToTrack = useCallback(
+    (layerType: 'video' | 'audio' | 'text' | 'image') => {
+      if (!selectedResource) return;
+      const typeMap = { video: ItemType.VIDEO, image: ItemType.IMAGE, audio: ItemType.MUSIC, text: ItemType.TEXT };
+      const layer = store.layers.find((l) => l.type === layerType) ?? store.addLayer(layerType);
+      const duration = selectedResource.duration ?? 3000;
+      const editorItem = createItem(duration, selectedResource.title, typeMap[layerType], {
+        url: selectedResource.url,
+        content: selectedResource.content,
+      });
+      const start = store.getTotalTime();
+      store.addItemAtTime(layer.id, editorItem, start);
+      setSelectedResource(null);
+      onRefresh();
+    },
+    [selectedResource, store, onRefresh]
+  );
 
   const handleExport = useCallback(async () => {
     try {
@@ -251,8 +278,24 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ project, onClose, onShowModel
           onShowModelConfig={onShowModelConfig ?? (() => {})}
           onAIGenerateSubtitle={handleAIGenerateSubtitle}
           onAIGenerateAudio={handleAIGenerateAudio}
+          selectedResource={selectedResource}
+          onSelectResource={setSelectedResource}
+          collapsed={resourcePanelCollapsed}
+          onToggleCollapse={() => setResourcePanelCollapsed((c) => !c)}
         />
-        <PropertyPanel store={store} item={store.getActiveItem()} onRefresh={onRefresh} />
+        <div className="w-56 flex-shrink-0 flex flex-col gap-3">
+          {selectedResource && (
+            <ResourcePreview resource={selectedResource} onAddToTrack={handleAddResourceToTrack} />
+          )}
+          {store.getActiveItem() && (
+            <PropertyPanel store={store} item={store.getActiveItem()} onRefresh={onRefresh} />
+          )}
+          {!selectedResource && !store.getActiveItem() && (
+            <div className="flex-1 p-4 bg-[var(--bg-surface)] border border-[var(--border-primary)] rounded-xl">
+              <p className="text-xs text-[var(--text-muted)]">选择资源或片段以编辑</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

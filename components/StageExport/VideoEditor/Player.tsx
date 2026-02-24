@@ -35,6 +35,7 @@ const ItemVideo: React.FC<{ item: EditorItem; store: VideoEditorStore; hasSepara
       className="max-w-full max-h-full object-contain"
       muted={hasSeparateAudio}
       playsInline
+      preload="auto"
     />
   );
 };

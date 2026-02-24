@@ -1,10 +1,54 @@
 /**
  * 视频剪辑器 - 状态管理
+ * 参考 lz-movie-edit：使用 requestAnimationFrame 实现丝滑播放
  */
 import { EditorItem, EditorLayer, ItemType, PlayStatus, createId, createItem, createLayer } from './types';
 import type { Shot } from '../../../types';
 
 const SCALE_DOM_SPACE = 10;
+
+/** 基于 requestAnimationFrame 的计时器，播放更丝滑 */
+class Timer {
+  current = 0;
+  lastTime = 0;
+  firstRecordTime = false;
+  lastTimeRange = 0;
+  updateCallback?: (v: number) => void;
+  private handler = 0;
+  private running = false;
+
+  setUpdateCallback(cb: (v: number) => void) {
+    this.updateCallback = cb;
+  }
+
+  start() {
+    this.running = true;
+    this.handler = window.requestAnimationFrame(this.update);
+  }
+
+  private update = (num: number) => {
+    if (!this.running) return;
+    if (!this.firstRecordTime) {
+      this.firstRecordTime = true;
+      this.lastTime = num;
+    }
+    this.current = this.lastTimeRange + (num - this.lastTime);
+    this.updateCallback?.(this.current);
+    this.handler = window.requestAnimationFrame(this.update);
+  };
+
+  stop = () => {
+    this.running = false;
+    this.lastTimeRange = this.current;
+    this.firstRecordTime = false;
+    window.cancelAnimationFrame(this.handler);
+  };
+
+  resetCurrentTime(num: number) {
+    this.lastTimeRange = num;
+    this.current = num;
+  }
+}
 
 export class VideoEditorStore {
   layers: EditorLayer[] = [];
@@ -21,8 +65,12 @@ export class VideoEditorStore {
   updateFlag = Symbol(1);
   timerScale = 10;
   size = { width: 9, height: 16 };
-  private timerId: ReturnType<typeof setInterval> | null = null;
+  private timer: Timer;
   private updateCallback: (() => void) | null = null;
+
+  constructor() {
+    this.timer = new Timer();
+  }
 
   getActiveLayer(): EditorLayer | null {
     return this.layers[this.activeLayerIndex] ?? null;
@@ -43,27 +91,34 @@ export class VideoEditorStore {
     return result;
   }
 
+  /** 节流：避免每帧触发 UI 更新导致卡顿，30fps 兼顾流畅与性能 */
+  private lastUiUpdate = 0;
+  private readonly UI_UPDATE_INTERVAL = 1000 / 30;
+
   play(): void {
     this.playStatus = PlayStatus.PLAYING;
-    this.timerId = setInterval(() => {
-      this.currentTime += 1000 / 24;
-      if (this.currentTime > this.getTotalTime()) {
+    this.timer.setUpdateCallback((time: number) => {
+      this.currentTime = time;
+      if (this.currentTime >= this.getTotalTime()) {
         this.pause();
       }
-      this.updateCallback?.();
-    }, 1000 / 24);
+      const now = performance.now();
+      if (now - this.lastUiUpdate >= this.UI_UPDATE_INTERVAL) {
+        this.lastUiUpdate = now;
+        this.updateCallback?.();
+      }
+    });
+    this.timer.start();
   }
 
   pause(): void {
     this.playStatus = PlayStatus.PAUSE;
-    if (this.timerId) {
-      clearInterval(this.timerId);
-      this.timerId = null;
-    }
+    this.timer.stop();
   }
 
   setCurrentTime(t: number): void {
     this.currentTime = Math.max(0, t);
+    this.timer.resetCurrentTime(this.currentTime);
     this.updateFlag = Symbol(1);
     this.updateCallback?.();
   }
@@ -99,6 +154,27 @@ export class VideoEditorStore {
     if (this.activeLayerIndex >= this.layers.length) this.activeLayerIndex = Math.max(0, this.layers.length - 1);
     this.activeItemId = '';
     this.updateFlag = Symbol(1);
+  }
+
+  /** 修改片段时长（拖拽右边缘），会挤压或腾出后续片段 */
+  setItemDuration(layerId: string, itemId: string, newDuration: number): boolean {
+    const layer = this.layers.find((l) => l.id === layerId);
+    if (!layer) return false;
+    const idx = layer.items.findIndex((i) => i.id === itemId);
+    if (idx < 0) return false;
+    const minDuration = 1000;
+    const item = layer.items[idx];
+    const delta = newDuration - item.duration;
+    if (delta === 0) return true;
+    if (newDuration < minDuration) return false;
+    item.duration = newDuration;
+    let prevEnd = item.start + newDuration;
+    for (let i = idx + 1; i < layer.items.length; i++) {
+      layer.items[i].start = Math.max(prevEnd, layer.items[i].start + delta);
+      prevEnd = layer.items[i].start + layer.items[i].duration;
+    }
+    this.updateFlag = Symbol(1);
+    return true;
   }
 
   addItemAtTime(layerId: string, item: EditorItem, startTime: number): void {
@@ -205,18 +281,36 @@ export class VideoEditorStore {
     return JSON.stringify(this.layers);
   }
 
-  /** 同轨道内交换元素顺序 */
-  exchangeItems(sourceLayerId: string, sourceIndex: number, destIndex: number): void {
-    const layer = this.layers.find((l) => l.id === sourceLayerId);
-    if (!layer || sourceIndex === destIndex) return;
-    const [item] = layer.items.splice(sourceIndex, 1);
-    const insertIdx = sourceIndex < destIndex ? destIndex - 1 : destIndex;
-    layer.items.splice(insertIdx, 0, item);
-    let start = 0;
-    for (const i of layer.items) {
-      i.start = start;
-      start += i.duration;
+  /** 同轨道或跨轨道交换/移动元素顺序（支持拖拽调换） */
+  exchangeItems(
+    sourceLayerId: string,
+    sourceIndex: number,
+    destLayerId: string,
+    destIndex: number
+  ): void {
+    const srcLayer = this.layers.find((l) => l.id === sourceLayerId);
+    const destLayer = this.layers.find((l) => l.id === destLayerId);
+    if (!srcLayer || !destLayer) return;
+    const [item] = srcLayer.items.splice(sourceIndex, 1);
+    if (!item) return;
+
+    if (srcLayer.id === destLayer.id) {
+      if (sourceIndex === destIndex) return;
+      const insertIdx = sourceIndex < destIndex ? destIndex - 1 : destIndex;
+      srcLayer.items.splice(insertIdx, 0, item);
+    } else {
+      destLayer.items.splice(destIndex, 0, item);
     }
+
+    const reflowStarts = (layer: EditorLayer) => {
+      let start = 0;
+      for (const i of layer.items) {
+        i.start = start;
+        start += i.duration;
+      }
+    };
+    reflowStarts(srcLayer);
+    if (srcLayer.id !== destLayer.id) reflowStarts(destLayer);
     this.updateFlag = Symbol(1);
   }
 

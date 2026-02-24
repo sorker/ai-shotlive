@@ -1,6 +1,35 @@
 /**
  * 视频剪辑器 - 工具函数
  */
+
+/** 从音频 URL 获取波形数据（用于音轨可视化） */
+export async function getAudioWaveform(
+  url: string,
+  barCount: number = 32
+): Promise<number[]> {
+  try {
+    const res = await fetch(url);
+    const buf = await res.arrayBuffer();
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const decoded = await ctx.decodeAudioData(buf);
+    const ch = decoded.getChannelData(0);
+    const step = Math.floor(ch.length / barCount);
+    const bars: number[] = [];
+    for (let i = 0; i < barCount; i++) {
+      let sum = 0;
+      const start = i * step;
+      for (let j = 0; j < step && start + j < ch.length; j++) {
+        sum += Math.abs(ch[start + j]);
+      }
+      bars.push(sum / step);
+    }
+    const max = Math.max(...bars, 0.001);
+    return bars.map((v) => v / max);
+  } catch {
+    return new Array(barCount).fill(0.3);
+  }
+}
+
 export function formatTime(ms: number): string {
   const totalSec = Math.ceil(ms / 1000);
   const minutes = Math.floor(totalSec / 60);
