@@ -21,6 +21,8 @@ import preferencesRoutes from './routes/preferences.js';
 import taskRoutes from './routes/tasks.js';
 import visualStyleRoutes from './routes/visualStyles.js';
 import dataTransferRoutes from './routes/dataTransfer.js';
+import videoEditorRoutes from './routes/videoEditor.js';
+import aiRoutes from './routes/ai.js';
 import { recoverTasks } from './services/taskRunner.js';
 import { mountProxy } from './proxy.js';
 
@@ -53,6 +55,8 @@ app.use('/api/preferences', preferencesRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/visual-styles', visualStyleRoutes);
 app.use('/api/data-transfer', dataTransferRoutes);
+app.use('/api/projects', videoEditorRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 健康检查
 app.get('/api/health', (_req, res) => {

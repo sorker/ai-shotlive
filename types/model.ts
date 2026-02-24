@@ -10,7 +10,7 @@
 /**
  * 模型类型
  */
-export type ModelType = 'chat' | 'image' | 'video';
+export type ModelType = 'chat' | 'image' | 'video' | 'audio';
 
 /**
  * 横竖屏比例类型
@@ -118,9 +118,25 @@ export interface VideoModelDefinition extends ModelDefinitionBase {
 }
 
 /**
+ * 音频/TTS 模型参数
+ */
+export interface AudioModelParams {
+  /** 支持的语言 */
+  supportedLanguages?: string[];
+}
+
+/**
+ * 音频/TTS 模型定义
+ */
+export interface AudioModelDefinition extends ModelDefinitionBase {
+  type: 'audio';
+  params: AudioModelParams;
+}
+
+/**
  * 模型定义联合类型
  */
-export type ModelDefinition = ChatModelDefinition | ImageModelDefinition | VideoModelDefinition;
+export type ModelDefinition = ChatModelDefinition | ImageModelDefinition | VideoModelDefinition | AudioModelDefinition;
 
 // ============================================
 // 提供商定义
@@ -150,6 +166,7 @@ export interface ActiveModels {
   chat: string;                  // 当前激活的对话模型 ID
   image: string;                 // 当前激活的图片模型 ID
   video: string;                 // 当前激活的视频模型 ID
+  audio: string;                 // 当前激活的音频/TTS 模型 ID
 }
 
 /**
@@ -853,4 +870,5 @@ export const DEFAULT_ACTIVE_MODELS: ActiveModels = {
   chat: 'gpt-5.1',
   image: 'gemini-3-pro-image-preview',
   video: 'sora-2',
+  audio: '',  // 音频模型需用户配置
 };

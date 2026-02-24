@@ -33,6 +33,7 @@ const typeDescriptions: Record<ModelType, string> = {
   chat: '用于剧本解析、分镜生成、提示词优化等文本生成任务',
   image: '用于角色定妆、场景生成、关键帧生成等图片生成任务',
   video: '用于视频片段生成任务',
+  audio: '用于 AI 配音、TTS 文本转语音等音频生成任务',
 };
 
 /**

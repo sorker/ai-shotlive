@@ -83,7 +83,14 @@
 
 ### Phase 04: 成片与导出 (Export)
 
-- 时间轴预览、渲染进度追踪，导出高清关键帧与 MP4 片段，便于后期剪辑。
+- **时间轴预览**：渲染进度追踪，导出高清关键帧与 MP4 片段。
+- **视频剪辑器**：
+  - **多轨道**：支持视频、音频、字幕、图片轨道，可自由增加与删除轨道。
+  - **右侧资源库**：按剧本/镜头、角色、场景、视频、上传、AI 字幕、AI 音频分类展示，点击即可拖入对应轨道。
+  - **上传资源**：支持上传图片、视频、音频文件供剪辑使用。
+  - **AI 字幕**：输入文本，AI 整理为字幕格式并加入字幕轨道。
+  - **AI 音频**：输入文本，AI 生成配音（TTS）并加入音频轨道。
+  - **下载剪辑**：将当前轨道中的视频与图片片段打包为 ZIP 下载。
 
 ### 账户管理
 
@@ -107,8 +114,9 @@
 | **文本 (Chat)** | OpenAI、Anthropic、DeepSeek、豆包、通义千问、智谱、Google Gemini、xAI、AntSK、SiliconFlow、Moonshot、OpenRouter 等 |
 | **图像 (Image)** | Google Gemini、豆包 Seedream、通义万相、可灵 Image（AntSK）等 |
 | **视频 (Video)** | Veo 3.1 / Sora-2（AntSK/OpenAI）、豆包 Seedance、可灵、Vidu、万象（通义）等 |
+| **音频 (Audio)** | 用于 AI 字幕整理与 TTS 配音，可配置对话模型或 TTS 专用模型 |
 
-- 在 **模型配置** 中为各提供商填写 API Key，并选择当前激活的文本/图像/视频模型。
+- 在 **模型配置** 中为各提供商填写 API Key，并选择当前激活的文本/图像/视频/音频模型。
 - 默认推荐使用 [**AntSK API**](https://api.antsk.cn/) 一站式调用多类模型；也可使用各厂商官方 API，按需切换。
 
 ---
@@ -119,7 +127,7 @@
 |------|------|
 | **前端** | React 19, Vite, Tailwind CSS |
 | **后端** | Express.js, MySQL, JWT 认证 |
-| **AI** | 多厂商文本/图像/视频 API，适配器层统一调用（见 `services/adapters`、`types/model.ts`） |
+| **AI** | 多厂商文本/图像/视频/音频 API，适配器层统一调用（见 `services/adapters`、`types/model.ts`）；视频剪辑 AI 字幕与 TTS 见 `services/videoEditorAiService.ts` |
 | **存储** | MySQL 持久化项目、资产、模型配置、用户偏好；用户数据按 `user_id` 隔离 |
 | **文件** | 小说上传文件存于 `uploads/`，媒体文件（图片/视频）存于 `data/`，均按用户/项目隔离 |
 | **备份** | 支持 ZIP 归档导出/导入（数据库 + 媒体文件），导入时自动创建新用户 |
@@ -225,6 +233,7 @@ ai-shotlive-Director/
 │   ├── StageAssets/         # Phase 02：角色/场景/道具资产
 │   ├── StageDirector/       # Phase 03：导演工作台与关键帧
 │   ├── StageExport/         # Phase 04：成片导出
+│   │   └── VideoEditor/     # 视频剪辑器（多轨道、资源库、AI 字幕/音频、导出）
 │   ├── StagePrompts/        # 提示词管理
 │   ├── ModelConfig/         # 模型配置（多提供商、API Key、激活模型）
 │   └── Onboarding/
@@ -236,6 +245,7 @@ ai-shotlive-Director/
 │   ├── ai/
 │   │   ├── novelScriptService.ts  # 小说 → 剧集剧本
 │   │   ├── scriptService.ts, visualService.ts, shotService.ts, videoService.ts
+│   │   ├── videoEditorAiService.ts # 视频剪辑 AI（字幕整理、TTS 配音）
 │   │   └── apiCore.ts, promptConstants.ts
 │   ├── adapters/            # chat / image / video 多厂商适配器
 │   └── projectPatchService.ts, taskService.ts, exportService.ts 等
@@ -246,6 +256,8 @@ ai-shotlive-Director/
 │       ├── middleware/auth.ts
 │       ├── routes/
 │       │   ├── auth.ts      # 登录/注册/资料修改
+│       │   ├── ai.ts        # 视频剪辑 AI（字幕优化、TTS）
+│       │   ├── videoEditor.ts # 视频剪辑导出
 │       │   ├── projects.ts, assets.ts, models.ts
 │       │   ├── uploads.ts   # 小说等文件上传
 │       │   ├── tasks.ts     # 异步任务
@@ -283,6 +295,7 @@ ai-shotlive-Director/
    - **故事/剧本**：直接粘贴故事或剧本 → 生成分镜脚本。
 4. **资产**：Phase 02 生成角色定妆与场景概念图。
 5. **分镜与成片**：Phase 03 生成首帧（及可选尾帧），可选九宫格选构图，再选视频模型生成片段；Phase 04 预览与导出。
+6. **视频剪辑**：在成片导出页打开视频剪辑器，从资源库拖入素材到多轨道，使用 AI 字幕/音频增强，最后下载剪辑后的视频。
 
 ---
 

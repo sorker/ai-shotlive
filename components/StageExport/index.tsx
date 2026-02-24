@@ -17,13 +17,15 @@ import ActionButtons from './ActionButtons';
 import SecondaryOptions from './SecondaryOptions';
 import VideoPlayerModal from './VideoPlayerModal';
 import RenderLogsModal from './RenderLogsModal';
+import VideoEditor from './VideoEditor';
 import { useAlert } from '../GlobalAlert';
 
 interface Props {
   project: ProjectState;
+  onShowModelConfig?: () => void;
 }
 
-const StageExport: React.FC<Props> = ({ project }) => {
+const StageExport: React.FC<Props> = ({ project, onShowModelConfig }) => {
   const { showAlert } = useAlert();
   const completedShots = getCompletedShots(project);
   const progress = calculateProgress(project);
@@ -52,6 +54,7 @@ const StageExport: React.FC<Props> = ({ project }) => {
 
   const [isDataExporting, setIsDataExporting] = useState(false);
   const [isDataImporting, setIsDataImporting] = useState(false);
+  const [showVideoEditor, setShowVideoEditor] = useState(false);
 
   // Auto-play when shot changes
   useEffect(() => {
@@ -273,6 +276,7 @@ const StageExport: React.FC<Props> = ({ project }) => {
               }}
               onPreview={openVideoPlayer}
               onDownloadMaster={handleDownloadMaster}
+              onOpenEditor={() => setShowVideoEditor(true)}
             />
           </div>
 
@@ -327,6 +331,18 @@ const StageExport: React.FC<Props> = ({ project }) => {
         className="hidden"
         onChange={handleImportFileChange}
       />
+
+      {/* 视频剪辑器 */}
+      {showVideoEditor && (
+        <VideoEditor
+          project={project}
+          onClose={() => setShowVideoEditor(false)}
+          onShowModelConfig={() => {
+            setShowVideoEditor(false);
+            onShowModelConfig?.();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -170,6 +170,11 @@ export const loadRegistry = (): ModelRegistryState => {
       
       // 迁移：清除旧版 globalApiKey 字段（如果存在）
       delete (parsed as any).globalApiKey;
+
+      // 迁移：确保 activeModels.audio 存在
+      if (!('audio' in parsed.activeModels) || parsed.activeModels.audio === undefined) {
+        parsed.activeModels.audio = '';
+      }
       
       registryState = parsed;
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Download, FileVideo, Loader2 } from 'lucide-react';
+import { Play, Download, FileVideo, Loader2, Scissors } from 'lucide-react';
 import { STYLES, DownloadState } from './constants';
 import { useAlert } from '../GlobalAlert';
 
@@ -10,6 +10,7 @@ interface Props {
   downloadState: DownloadState;
   onPreview: () => void;
   onDownloadMaster: () => void;
+  onOpenEditor?: () => void;
 }
 
 const ActionButtons: React.FC<Props> = ({
@@ -18,13 +19,14 @@ const ActionButtons: React.FC<Props> = ({
   progress,
   downloadState,
   onPreview,
-  onDownloadMaster
+  onDownloadMaster,
+  onOpenEditor,
 }) => {
   const { showAlert } = useAlert();
   const { isDownloading, phase, progress: downloadProgress } = downloadState;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <button 
         onClick={onPreview}
         disabled={completedShotsCount === 0}
@@ -53,6 +55,16 @@ const ActionButtons: React.FC<Props> = ({
         {isDownloading ? `${phase} ${downloadProgress}%` : 'Download Master (.mp4)'}
       </button>
       
+      {onOpenEditor && (
+        <button 
+          onClick={onOpenEditor}
+          disabled={completedShotsCount === 0}
+          className={completedShotsCount > 0 ? STYLES.button.tertiary : STYLES.button.disabled}
+        >
+          <Scissors className="w-4 h-4" />
+          进入剪辑 ({completedShotsCount}/{totalShots})
+        </button>
+      )}
       <button 
         className={STYLES.button.tertiary}
         onClick={() => showAlert('暂未开发', { type: 'info', title: '提示' })}

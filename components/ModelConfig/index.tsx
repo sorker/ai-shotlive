@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Settings, MessageSquare, Image, Video, Key, ExternalLink, Gift, Sparkles } from 'lucide-react';
+import { X, Settings, MessageSquare, Image, Video, Music, Key, ExternalLink, Gift, Sparkles } from 'lucide-react';
 import { ModelType, ModelDefinition } from '../../types/model';
 import {
   getRegistryState,
@@ -23,7 +23,7 @@ interface ModelConfigModalProps {
   onClose: () => void;
 }
 
-type TabType = 'global' | 'chat' | 'image' | 'video';
+type TabType = 'global' | 'chat' | 'image' | 'video' | 'audio';
 
 const ModelConfigModal: React.FC<ModelConfigModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<TabType>('global');
@@ -40,6 +40,7 @@ const ModelConfigModal: React.FC<ModelConfigModalProps> = ({ isOpen, onClose }) 
     { id: 'chat', label: '对话模型', icon: <MessageSquare className="w-4 h-4" /> },
     { id: 'image', label: '图片模型', icon: <Image className="w-4 h-4" /> },
     { id: 'video', label: '视频模型', icon: <Video className="w-4 h-4" /> },
+    { id: 'audio', label: '音频模型', icon: <Music className="w-4 h-4" /> },
   ];
 
   return (

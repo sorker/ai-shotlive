@@ -251,7 +251,7 @@ function App() {
         return <StageDirector project={project} updateProject={updateProject} onGeneratingChange={setIsGenerating} />;
       case 'export':
         if (needsEpisodeSelection) return renderEpisodeGate();
-        return <StageExport project={project} />;
+        return <StageExport project={project} onShowModelConfig={handleShowModelConfig} />;
       case 'prompts':
         return <StagePrompts project={project} updateProject={updateProject} />;
       default:
