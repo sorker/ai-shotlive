@@ -85,7 +85,7 @@ type VideoFrameCallbackMetadata = {
 }
 
 export function ExportModal({ open, onOpenChange }: ExportModalProps) {
-  const { sortedVideoClips, mediaFiles } = useEditor()
+  const { sortedVideoClips, mediaFiles, trackVisible } = useEditor()
 
   const [format, setFormat] = useState<ExportFormat>("webm")
   const [quality, setQuality] = useState<ExportQuality>("medium")
@@ -140,8 +140,10 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
     const supportsCanvasFilter = typeof ctx.filter !== 'undefined'
     console.log("[Export] Canvas filter support:", supportsCanvasFilter)
 
+    // 排除隐藏轨道上的片段，与预览一致
+    const visibleClips = currentClips.filter((c) => trackVisible[c.trackId] !== false)
     // Sort clips by start time
-    const clips = [...currentClips].sort((a, b) => a.startTime - b.startTime)
+    const clips = [...visibleClips].sort((a, b) => a.startTime - b.startTime)
 
     // Calculate timeline end time from the clips we're actually exporting
     // This ensures consistency and avoids stale closure values
@@ -542,7 +544,7 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
 
           newActiveVideoIds.add(clip.id)
 
-          // Calculate expected video position
+          // Calculate expected video position (与 CutOS 一致)
           const clipStart = clip.startTime / PIXELS_PER_SECOND
           const mediaOffset = clip.mediaOffset / PIXELS_PER_SECOND
           const expectedVideoTime = mediaOffset + (timelineTime - clipStart)

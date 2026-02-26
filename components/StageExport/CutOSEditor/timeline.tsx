@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Video, Volume2, VolumeX, Lock, Unlock, Eye, EyeOff, Film, Trash2, Scissors, Undo2, Redo2, Copy, Clipboard } from "lucide-react"
+import { Video, Volume2, VolumeX, Lock, Unlock, Eye, EyeOff, Film, Trash2, Scissors, Undo2, Redo2, Copy, Clipboard, CopyPlus } from "lucide-react"
 import { motion } from "framer-motion"
 import { Button } from "./ui/button"
 import { useEditor, TimelineClip, PIXELS_PER_SECOND, DEFAULT_CLIP_TRANSFORM, DEFAULT_CLIP_EFFECTS } from "./editor-context"
@@ -18,6 +18,7 @@ export function Timeline() {
     setSelectedClipId,
     currentTime,
     setCurrentTime,
+    seekTo,
     isPlaying,
     setIsPlaying,
     timelineEndTime,
@@ -45,10 +46,11 @@ export function Timeline() {
     setTrackVisible,
   } = useEditor()
 
-  // Editing actions
+  // Editing actions - 剪切：仅当播放头在片段上且（无选中或选中即当前片段）时可用
+  const canCut = activeClip && (!selectedClipId || activeClip.id === selectedClipId)
   const handleCut = () => {
-    if (activeClip) {
-      splitClip(activeClip.id, currentTime)
+    if (canCut) {
+      splitClip(activeClip!.id, currentTime)
     }
   }
 
@@ -65,6 +67,15 @@ export function Timeline() {
       copyClip(selectedClipId)
     } else if (activeClip) {
       copyClip(activeClip.id)
+    }
+  }
+
+  // Duplicate = Copy + Paste（与 CutOS 一致的常用操作）
+  const handleDuplicate = () => {
+    const clipId = selectedClipId || activeClip?.id
+    if (clipId) {
+      copyClip(clipId)
+      pasteClip()
     }
   }
 
@@ -279,18 +290,15 @@ export function Timeline() {
         const newDuration = Math.max(PIXELS_PER_SECOND * 0.1, trimState.initialDuration + deltaBase)
         const endInMedia = trimState.initialMediaOffset + newDuration
         
-        // Clamp the delta to valid bounds
+        // Clamp the delta to valid bounds (与 CutOS 一致：右边缘为裁剪，非变速)
         if (endInMedia > maxMediaDuration) {
-          // Can't extend past media end
           const maxDuration = maxMediaDuration - trimState.initialMediaOffset
           const maxDelta = maxDuration - trimState.initialDuration
           validDeltaVisual = (maxDelta / PIXELS_PER_SECOND) * pixelsPerSecond
         } else if (newDuration < PIXELS_PER_SECOND * 0.1) {
-          // Minimum duration
           const minDelta = PIXELS_PER_SECOND * 0.1 - trimState.initialDuration
           validDeltaVisual = (minDelta / PIXELS_PER_SECOND) * pixelsPerSecond
         }
-        
         if (endInMedia <= maxMediaDuration && newDuration > PIXELS_PER_SECOND * 0.1) {
           pendingUpdateRef.current = {
             clipId: trimState.clipId,
@@ -679,18 +687,14 @@ export function Timeline() {
 
       const newTime = getTimeFromMouseEvent(e)
       if (newTime !== null) {
-        // Pause playback if playing
-        if (isPlaying) {
-          setIsPlaying(false)
-        }
-        // Allow dragging past the timeline end
+        // 使用 seekTo 支持播放中点击跳转；仅拖拽时在 handleScrubMove 中暂停
         const clampedTime = Math.max(0, newTime)
-        setCurrentTime(clampedTime)
+        seekTo(clampedTime)
         setSelectedClipId(null)
         setIsScrubbing(true)
       }
     },
-    [setCurrentTime, setSelectedClipId, getTimeFromMouseEvent, setIsScrubbing, isPlaying, setIsPlaying]
+    [seekTo, setSelectedClipId, getTimeFromMouseEvent, setIsScrubbing]
   )
 
   // Handle scrubbing mousemove
@@ -700,14 +704,15 @@ export function Timeline() {
       // Prevent text selection and default behaviors during drag
       e.preventDefault()
       e.stopPropagation()
+      // 拖拽时暂停播放，避免 RAF 覆盖 scrubbing 位置
+      if (isPlaying) setIsPlaying(false)
       const newTime = getTimeFromMouseEvent(e)
       if (newTime !== null) {
-        // Allow dragging past the timeline end
         const clampedTime = Math.max(0, newTime)
         setCurrentTime(clampedTime)
       }
     },
-    [isScrubbing, setCurrentTime, getTimeFromMouseEvent]
+    [isScrubbing, isPlaying, setIsPlaying, setCurrentTime, getTimeFromMouseEvent]
   )
 
   // Handle scrubbing mouseup
@@ -813,14 +818,14 @@ export function Timeline() {
           <div className="flex items-center gap-1 border-l border-[var(--border-primary)] pl-3 ml-3">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
-                variant={activeClip ? "default" : "ghost"}
+                variant={canCut ? "default" : "ghost"}
                 size="sm"
                 className={`h-7 w-7 p-0 transition-colors ${
-                  activeClip ? "bg-[var(--accent)] text-[var(--accent-on)] shadow-md" : ""
+                  canCut ? "bg-[var(--accent)] text-[var(--accent-on)] shadow-md" : ""
                 }`}
                 onClick={handleCut}
-                disabled={!activeClip}
-                title="Split clip at playhead (S)"
+                disabled={!canCut}
+                title="Split clip at playhead (S) - 需将播放头移到要剪切的片段上"
               >
                 <Scissors className="h-3.5 w-3.5" />
               </Button>
@@ -885,6 +890,18 @@ export function Timeline() {
                 title="Paste clip (Ctrl+V / Cmd+V)"
               >
                 <Clipboard className="h-3.5 w-3.5" />
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={handleDuplicate}
+                disabled={!selectedClipId && !activeClip}
+                title="Duplicate clip (Ctrl+D / Cmd+D)"
+              >
+                <CopyPlus className="h-3.5 w-3.5" />
               </Button>
             </motion.div>
           </div>
@@ -1285,7 +1302,7 @@ export function Timeline() {
         </div>
       )}
 
-      {/* Context Menu */}
+      {/* Context Menu - 与 CutOS 一致，增加 Paste、Duplicate */}
       {contextMenu && (
         <div
           className="fixed z-50 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-md shadow-lg py-1 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150"
@@ -1317,6 +1334,30 @@ export function Timeline() {
             <Copy className="h-3.5 w-3.5" />
             Copy
             <span className="ml-auto text-xs text-[var(--text-muted)]">Ctrl+C</span>
+          </button>
+          <button
+            className="w-full px-3 py-2 text-sm text-left hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] flex items-center gap-2 cursor-pointer"
+            onClick={() => {
+              copyClip(contextMenu.clipId)
+              pasteClip()
+              setContextMenu(null)
+            }}
+          >
+            <CopyPlus className="h-3.5 w-3.5" />
+            Duplicate
+            <span className="ml-auto text-xs text-[var(--text-muted)]">Ctrl+D</span>
+          </button>
+          <button
+            className="w-full px-3 py-2 text-sm text-left hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => {
+              pasteClip()
+              setContextMenu(null)
+            }}
+            disabled={!canPaste}
+          >
+            <Clipboard className="h-3.5 w-3.5" />
+            Paste
+            <span className="ml-auto text-xs text-[var(--text-muted)]">Ctrl+V</span>
           </button>
           <div className="h-px bg-[var(--border-primary)] my-1" />
           <button

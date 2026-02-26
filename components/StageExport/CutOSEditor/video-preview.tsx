@@ -56,6 +56,8 @@ export function VideoPreview() {
     setIsPlaying,
     currentTime,
     setCurrentTime,
+    seekTo,
+    registerSeekHandler,
     activeClip,
     backgroundClip,
     clipTimeOffset,
@@ -113,7 +115,20 @@ export function VideoPreview() {
 
   // Track playback start time and position for smooth animation
   const playbackStartRef = useRef<{ startTime: number; startPosition: number } | null>(null)
+  const playbackTimeRef = useRef(0) // 每帧更新的实际播放时间，供内部逻辑使用
+  const lastSyncRef = useRef(0) // 上次同步到 context 的时间戳，用于节流
+  const SYNC_INTERVAL_MS = 50 // 50ms ≈ 20fps，减少 setState 频率
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 注册 seek 回调：播放中点击时间线跳转时，更新 playbackStartRef 使 RAF 从新位置继续
+  useEffect(() => {
+    registerSeekHandler((time: number) => {
+      if (playbackStartRef.current) {
+        playbackStartRef.current = { startTime: performance.now(), startPosition: time }
+      }
+    })
+    return () => registerSeekHandler(null)
+  }, [registerSeekHandler])
 
 
   const activeClipTransform = activeClip?.transform ?? DEFAULT_CLIP_TRANSFORM
@@ -151,6 +166,7 @@ export function VideoPreview() {
       startTime: performance.now(),
       startPosition: currentTime,
     }
+    lastSyncRef.current = 0 // 确保首帧立即同步
 
     const animate = (now: number) => {
       if (!playbackStartRef.current) return
@@ -163,10 +179,17 @@ export function VideoPreview() {
       if (newTime >= timelineEndTime) {
         setIsPlaying(false)
         setCurrentTime(timelineEndTime)
+        setDisplayTime(timelineEndTime)
         return
       }
 
-      setCurrentTime(newTime)
+      playbackTimeRef.current = newTime
+      // 节流：按 CutOS timeline 模式，减少 setState 频率，避免每帧触发 context 重渲染
+      if (now - lastSyncRef.current >= SYNC_INTERVAL_MS) {
+        lastSyncRef.current = now
+        setCurrentTime(newTime)
+        setDisplayTime(newTime)
+      }
       animationRef.current = requestAnimationFrame(animate)
     }
 
@@ -202,9 +225,10 @@ export function VideoPreview() {
     const nextMedia = mediaFiles.find((m) => m.id === nextClip.mediaId)
     if (!nextMedia) return
 
-    // Calculate how far we are from the end of current clip
+    // Calculate how far we are from the end of current clip（播放时用 playbackTimeRef 更精确）
     const currentClipEndTime = (activeClip!.startTime + activeClip!.duration) / PIXELS_PER_SECOND
-    const timeUntilNextClip = currentClipEndTime - currentTime
+    const t = isPlaying ? playbackTimeRef.current : currentTime
+    const timeUntilNextClip = currentClipEndTime - t
 
     const targetVideoRef = useNextVideo ? videoRef : nextVideoRef
 
@@ -713,21 +737,12 @@ export function VideoPreview() {
     }
   }, [chromakeyEnabled, activeClipEffects.chromakey, activeClip?.id, previewMedia?.id, backgroundClip?.id, backgroundMedia?.id, useNextVideo])
 
-  // Keep display time in sync during playback via animation frame
+  // 非播放时同步 displayTime 与 playbackTimeRef；播放时由主 RAF 循环节流更新
   useEffect(() => {
     if (!isPlaying) {
+      playbackTimeRef.current = currentTime
       setDisplayTime(currentTime)
-      return
     }
-
-    let frameId: number
-    const syncDisplayTime = () => {
-      setDisplayTime(currentTime)
-      frameId = requestAnimationFrame(syncDisplayTime)
-    }
-    frameId = requestAnimationFrame(syncDisplayTime)
-
-    return () => cancelAnimationFrame(frameId)
   }, [currentTime, isPlaying])
 
   const handlePlayPause = () => {
@@ -788,7 +803,7 @@ export function VideoPreview() {
     if (currentVideoRef.current && activeClip) {
       const newOffset = (newTime * PIXELS_PER_SECOND - activeClip.startTime) / PIXELS_PER_SECOND
       if (newOffset >= 0) {
-        currentVideoRef.current.currentTime = newOffset
+        currentVideoRef.current.currentTime = activeClip.mediaOffset / PIXELS_PER_SECOND + newOffset
       }
     }
   }
@@ -800,28 +815,23 @@ export function VideoPreview() {
     if (currentVideoRef.current && activeClip) {
       const newOffset = (newTime * PIXELS_PER_SECOND - activeClip.startTime) / PIXELS_PER_SECOND
       if (newOffset >= 0) {
-        currentVideoRef.current.currentTime = newOffset
+        currentVideoRef.current.currentTime = activeClip.mediaOffset / PIXELS_PER_SECOND + newOffset
       }
     }
   }
 
-  // Scrubber interaction
+  // Scrubber interaction - 进度条 0-100% 直接映射到 0-timelineEndTime，使用 seekTo 支持播放中跳转
   const handleScrubberClick = useCallback((e: React.MouseEvent) => {
     if (!scrubberRef.current) return
 
     const rect = scrubberRef.current.getBoundingClientRect()
     const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    // Calculate time based on scrubber position
-    // Use timelineEndTime as base, but allow going past it
-    // If timelineEndTime is 0 or very small, use a minimum of 10 seconds
-    const baseTime = Math.max(timelineEndTime, 10)
-    // Allow scrubbing up to 3x the base time, or at least 60 seconds
-    const maxScrubTime = Math.max(baseTime * 3, 60)
-    const newTime = percent * maxScrubTime
+    const maxTime = Math.max(timelineEndTime, 0.1)
+    const newTime = percent * maxTime
 
-    setCurrentTime(newTime)
+    seekTo(newTime)
     setDisplayTime(newTime)
-  }, [timelineEndTime, setCurrentTime])
+  }, [timelineEndTime, seekTo])
 
   const handleScrubberDrag = useCallback((e: React.MouseEvent) => {
     if (!scrubberRef.current) return
@@ -832,15 +842,14 @@ export function VideoPreview() {
       setIsPlaying(false)
     }
 
+    const maxTime = Math.max(timelineEndTime, 0.1)
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!scrubberRef.current) return
 
       const rect = scrubberRef.current.getBoundingClientRect()
       const percent = Math.max(0, Math.min(1, (moveEvent.clientX - rect.left) / rect.width))
-      // Calculate time based on scrubber position, allowing to go past timelineEndTime
-      const baseTime = Math.max(timelineEndTime, 10)
-      const maxScrubTime = Math.max(baseTime * 3, 60)
-      const newTime = percent * maxScrubTime
+      const newTime = percent * maxTime
 
       setCurrentTime(newTime)
       setDisplayTime(newTime)
@@ -862,9 +871,9 @@ export function VideoPreview() {
   const handleFullscreenScrub = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
 
-    // Get the progress bar element and its dimensions
     const progressBar = e.currentTarget as HTMLDivElement
     const rect = progressBar.getBoundingClientRect()
+    const maxTime = Math.max(timelineEndTime, 0.1)
 
     setIsSeeking(true)
     const wasPlaying = isPlaying
@@ -872,18 +881,13 @@ export function VideoPreview() {
       setIsPlaying(false)
     }
 
-    // Function to calculate and update time
     const updateTime = (clientX: number) => {
       const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-      // Calculate time based on scrubber position, allowing to go past timelineEndTime
-      const baseTime = Math.max(timelineEndTime, 10)
-      const maxScrubTime = Math.max(baseTime * 3, 60)
-      const newTime = percent * maxScrubTime
+      const newTime = percent * maxTime
       setCurrentTime(newTime)
       setDisplayTime(newTime)
     }
 
-    // Initial update
     updateTime(e.clientX)
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -1114,6 +1118,7 @@ export function VideoPreview() {
                   key={`bg-${backgroundMedia.id}-${backgroundClip.id}`}
                   src={backgroundMedia.objectUrl}
                   crossOrigin="anonymous"
+                  preload="auto"
                   className="absolute inset-0 h-full w-full object-contain pointer-events-none"
                   style={{
                     transform: `translate(${backgroundClipTransform.positionX}px, ${backgroundClipTransform.positionY}px) scale(${backgroundClipTransform.scale / 100})`,
@@ -1132,6 +1137,7 @@ export function VideoPreview() {
                 key={`primary-${previewMedia.id}`}
                 src={previewMedia.objectUrl}
                 crossOrigin="anonymous"
+                preload="auto"
                 style={{ display: 'none' }}
                 onLoadedMetadata={handleLoadedMetadata}
                 onCanPlay={handleCanPlay}
@@ -1143,6 +1149,7 @@ export function VideoPreview() {
                 key={`secondary-${previewMedia.id}`}
                 src={previewMedia.objectUrl}
                 crossOrigin="anonymous"
+                preload="auto"
                 style={{ display: 'none' }}
                 muted={!useNextVideo || (activeClip?.trackId ? (trackMuted[activeClip.trackId] ?? false) : false)}
                 playsInline
@@ -1276,9 +1283,9 @@ export function VideoPreview() {
                         className="relative h-2 flex-1 cursor-pointer rounded-full bg-white/20 group hover:h-4 transition-all"
                         onMouseDown={handleFullscreenScrub}
                       >
-                        {/* Progress bar */}
+                        {/* Progress bar - 使用 transition 使播放时移动更平滑 */}
                         <div
-                          className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent)]"
+                          className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent)] transition-[width] duration-75 ease-linear"
                           style={{ width: `${progressPercent}%` }}
                         />
 
@@ -1357,9 +1364,9 @@ export function VideoPreview() {
               onClick={handleScrubberClick}
               onMouseDown={handleScrubberDrag}
             >
-              {/* Progress bar */}
+              {/* Progress bar - 使用 transition 使播放时移动更平滑 */}
               <div
-                className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent)]"
+                className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent)] transition-[width] duration-75 ease-linear"
                 style={{ width: `${progressPercent}%` }}
               />
 

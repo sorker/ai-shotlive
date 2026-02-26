@@ -68,7 +68,8 @@ function EditorContent({
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         e.preventDefault();
-        if (selectedClipId) copyClip(selectedClipId);
+        const clipId = selectedClipId || activeClip?.id;
+        if (clipId) copyClip(clipId);
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
@@ -76,10 +77,13 @@ function EditorContent({
         if (canPaste) pasteClip();
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClipId) {
-        e.preventDefault();
-        removeClip(selectedClipId);
-        return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const clipId = selectedClipId || activeClip?.id;
+        if (clipId) {
+          e.preventDefault();
+          removeClip(clipId);
+          return;
+        }
       }
       if (e.code === 'Space') {
         e.preventDefault();
@@ -89,7 +93,16 @@ function EditorContent({
       }
       if (e.code === 'KeyS' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        if (activeClip) splitClip(activeClip.id, currentTime);
+        const canCut = activeClip && (!selectedClipId || activeClip.id === selectedClipId);
+        if (canCut) splitClip(activeClip.id, currentTime);
+      }
+      if (e.code === 'KeyD' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        const clipId = selectedClipId || activeClip?.id;
+        if (clipId) {
+          copyClip(clipId);
+          pasteClip();
+        }
       }
     },
     [

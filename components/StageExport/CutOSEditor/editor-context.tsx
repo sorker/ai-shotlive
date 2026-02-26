@@ -103,6 +103,9 @@ interface EditorContextType {
   setSelectedClipId: (id: string | null) => void;
   currentTime: number;
   setCurrentTime: (time: number) => void;
+  /** 跳转到指定时间，播放时也会更新内部基准，支持播放中点击时间线跳转 */
+  seekTo: (time: number) => void;
+  registerSeekHandler: (cb: ((time: number) => void) | null) => void;
   isPlaying: boolean;
   setIsPlaying: (playing: boolean) => void;
   isScrubbing: boolean;
@@ -169,7 +172,17 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const historyRef = useRef<TimelineClip[][]>([]);
   const historyIndexRef = useRef<number>(-1);
   const copiedClipRef = useRef<TimelineClip | null>(null);
+  const seekHandlerRef = useRef<((time: number) => void) | null>(null);
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+
+  const seekTo = useCallback((time: number) => {
+    setCurrentTime(time);
+    seekHandlerRef.current?.(time);
+  }, []);
+
+  const registerSeekHandler = useCallback((cb: ((time: number) => void) | null) => {
+    seekHandlerRef.current = cb;
+  }, []);
   const [canPasteState, setCanPasteState] = useState(false);
 
   const updateHistoryState = useCallback(() => {
@@ -331,7 +344,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       const splitPositionPixels = splitTime * PIXELS_PER_SECOND;
       const clipStart = clip.startTime;
       const clipEnd = clip.startTime + clip.duration;
-      if (splitPositionPixels <= clipStart || splitPositionPixels >= clipEnd) return;
+      // 允许微小误差，避免浮点精度导致无法剪切
+      const eps = 0.5;
+      if (splitPositionPixels <= clipStart + eps || splitPositionPixels >= clipEnd - eps) return;
       saveToHistory();
       const firstClipDuration = splitPositionPixels - clipStart;
       const secondClipDuration = clipEnd - splitPositionPixels;
@@ -536,6 +551,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     setSelectedClipId,
     currentTime,
     setCurrentTime,
+    seekTo,
+    registerSeekHandler,
     isPlaying,
     setIsPlaying,
     isScrubbing,
