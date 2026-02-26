@@ -53,7 +53,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const offset = (currentPage - 1) * pageSize;
 
     let where = 'user_id = ?';
-    const params: (string | number)[] = [req.userId];
+    const params: (string | number)[] = [req.userId!];
 
     if (typeFilter !== 'all') {
       where += ' AND type = ?';

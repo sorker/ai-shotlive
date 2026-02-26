@@ -653,21 +653,6 @@ export const initDatabase = async (): Promise<void> => {
     // 修改主键：在主键中加入 episode_id 以支持不同剧本中相同 ID 的实体
     await migrateEpisodeIdIntoPrimaryKeys(conn);
 
-    // ========== 视频剪辑状态表（项目+剧本隔离，支持多设备同步） ==========
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS video_editor_states (
-        project_id VARCHAR(255) NOT NULL,
-        user_id INT NOT NULL,
-        episode_id VARCHAR(255) NOT NULL DEFAULT '_default',
-        data MEDIUMTEXT NOT NULL COMMENT 'JSON: layers（含 urlRef 引用，不含完整 URL 以减小体积）',
-        version INT UNSIGNED DEFAULT 1 COMMENT '乐观锁版本号',
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (project_id, user_id, episode_id),
-        INDEX idx_user (user_id),
-        FOREIGN KEY (project_id, user_id) REFERENCES projects(id, user_id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
     // ========== 数据修复：清理 JSON 脏数据 ==========
     // 历史 bug：executeImageTask 曾将 {"base64":"...","url":"..."} 存入 image_url/reference_image
     // 需要提取 base64 和 url，修复为正确格式

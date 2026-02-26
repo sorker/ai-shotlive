@@ -10,7 +10,7 @@ interface Props {
   downloadState: DownloadState;
   onPreview: () => void;
   onDownloadMaster: () => void;
-  onOpenEditor?: () => void;
+  onOpenCutOS?: () => void;
 }
 
 const ActionButtons: React.FC<Props> = ({
@@ -20,7 +20,7 @@ const ActionButtons: React.FC<Props> = ({
   downloadState,
   onPreview,
   onDownloadMaster,
-  onOpenEditor,
+  onOpenCutOS,
 }) => {
   const { showAlert } = useAlert();
   const { isDownloading, phase, progress: downloadProgress } = downloadState;
@@ -54,17 +54,14 @@ const ActionButtons: React.FC<Props> = ({
         )}
         {isDownloading ? `${phase} ${downloadProgress}%` : 'Download Master (.mp4)'}
       </button>
-      
-      {onOpenEditor && (
-        <button 
-          onClick={onOpenEditor}
-          disabled={completedShotsCount === 0}
-          className={completedShotsCount > 0 ? STYLES.button.tertiary : STYLES.button.disabled}
-        >
-          <Scissors className="w-4 h-4" />
-          进入剪辑 ({completedShotsCount}/{totalShots})
-        </button>
-      )}
+      <button 
+        className={completedShotsCount > 0 ? STYLES.button.tertiary : STYLES.button.disabled}
+        onClick={onOpenCutOS}
+        disabled={completedShotsCount === 0}
+      >
+        <Scissors className="w-4 h-4" />
+        AI 剪辑
+      </button>
       <button 
         className={STYLES.button.tertiary}
         onClick={() => showAlert('暂未开发', { type: 'info', title: '提示' })}

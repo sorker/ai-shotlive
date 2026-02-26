@@ -15,9 +15,9 @@ import StatusPanel from './StatusPanel';
 import TimelineVisualizer from './TimelineVisualizer';
 import ActionButtons from './ActionButtons';
 import SecondaryOptions from './SecondaryOptions';
+import CutOSEditor from './CutOSEditor';
 import VideoPlayerModal from './VideoPlayerModal';
 import RenderLogsModal from './RenderLogsModal';
-import VideoEditor from './VideoEditor';
 import { useAlert } from '../GlobalAlert';
 
 interface Props {
@@ -54,7 +54,7 @@ const StageExport: React.FC<Props> = ({ project, onShowModelConfig }) => {
 
   const [isDataExporting, setIsDataExporting] = useState(false);
   const [isDataImporting, setIsDataImporting] = useState(false);
-  const [showVideoEditor, setShowVideoEditor] = useState(false);
+  const [showCutOSEditor, setShowCutOSEditor] = useState(false);
 
   // Auto-play when shot changes
   useEffect(() => {
@@ -276,7 +276,7 @@ const StageExport: React.FC<Props> = ({ project, onShowModelConfig }) => {
               }}
               onPreview={openVideoPlayer}
               onDownloadMaster={handleDownloadMaster}
-              onOpenEditor={() => setShowVideoEditor(true)}
+              onOpenCutOS={() => setShowCutOSEditor(true)}
             />
           </div>
 
@@ -314,6 +314,13 @@ const StageExport: React.FC<Props> = ({ project, onShowModelConfig }) => {
         />
       )}
 
+      {/* CutOS AI 剪辑 */}
+      <CutOSEditor
+        project={project}
+        open={showCutOSEditor}
+        onClose={() => setShowCutOSEditor(false)}
+      />
+
       {/* Render Logs Modal */}
       {showLogsModal && (
         <RenderLogsModal
@@ -331,18 +338,6 @@ const StageExport: React.FC<Props> = ({ project, onShowModelConfig }) => {
         className="hidden"
         onChange={handleImportFileChange}
       />
-
-      {/* 视频剪辑器 */}
-      {showVideoEditor && (
-        <VideoEditor
-          project={project}
-          onClose={() => setShowVideoEditor(false)}
-          onShowModelConfig={() => {
-            setShowVideoEditor(false);
-            onShowModelConfig?.();
-          }}
-        />
-      )}
     </div>
   );
 };

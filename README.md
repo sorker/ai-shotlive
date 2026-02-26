@@ -127,7 +127,7 @@
 |------|------|
 | **前端** | React 19, Vite, Tailwind CSS |
 | **后端** | Express.js, MySQL, JWT 认证 |
-| **AI** | 多厂商文本/图像/视频/音频 API，适配器层统一调用（见 `services/adapters`、`types/model.ts`）；视频剪辑 AI 字幕与 TTS 见 `services/videoEditorAiService.ts` |
+| **AI** | 多厂商文本/图像/视频/音频 API，适配器层统一调用（见 `services/adapters`、`types/model.ts`） |
 | **存储** | MySQL 持久化项目、资产、模型配置、用户偏好；用户数据按 `user_id` 隔离 |
 | **文件** | 小说上传文件存于 `uploads/`，媒体文件（图片/视频）存于 `data/`，均按用户/项目隔离 |
 | **备份** | 支持 ZIP 归档导出/导入（数据库 + 媒体文件），导入时自动创建新用户 |
@@ -233,7 +233,6 @@ ai-shotlive-Director/
 │   ├── StageAssets/         # Phase 02：角色/场景/道具资产
 │   ├── StageDirector/       # Phase 03：导演工作台与关键帧
 │   ├── StageExport/         # Phase 04：成片导出
-│   │   └── VideoEditor/     # 视频剪辑器（多轨道、资源库、AI 字幕/音频、导出）
 │   ├── StagePrompts/        # 提示词管理
 │   ├── ModelConfig/         # 模型配置（多提供商、API Key、激活模型）
 │   └── Onboarding/
@@ -245,7 +244,6 @@ ai-shotlive-Director/
 │   ├── ai/
 │   │   ├── novelScriptService.ts  # 小说 → 剧集剧本
 │   │   ├── scriptService.ts, visualService.ts, shotService.ts, videoService.ts
-│   │   ├── videoEditorAiService.ts # 视频剪辑 AI（字幕整理、TTS 配音）
 │   │   └── apiCore.ts, promptConstants.ts
 │   ├── adapters/            # chat / image / video 多厂商适配器
 │   └── projectPatchService.ts, taskService.ts, exportService.ts 等
@@ -256,8 +254,7 @@ ai-shotlive-Director/
 │       ├── middleware/auth.ts
 │       ├── routes/
 │       │   ├── auth.ts      # 登录/注册/资料修改
-│       │   ├── ai.ts        # 视频剪辑 AI（字幕优化、TTS）
-│       │   ├── videoEditor.ts # 视频剪辑导出
+│       │   ├── ai.ts
 │       │   ├── projects.ts, assets.ts, models.ts
 │       │   ├── uploads.ts   # 小说等文件上传
 │       │   ├── tasks.ts     # 异步任务
