@@ -33,6 +33,37 @@
 | POST /api/twelvelabs/status | 索引状态 | 未集成 |
 | POST /api/twelvelabs/search | NLP 视频搜索 | **缺失** |
 
+#### 视频索引 / NLP 视频搜索 替代方案调研
+
+TwelveLabs 功能：文本查询 → 返回匹配的视频片段及时间戳 (videoId, start, end)。以下为替代方案对比：
+
+| 方案 | 功能匹配度 | 成本 | 实现难度 | 推荐度 |
+|------|------------|------|----------|--------|
+| **阿里云智能媒体服务 IMS - SearchMediaByMultimodal** | ⭐⭐⭐ 最接近 | 按存储时长+搜索次数计费 | 中：需创建搜索库、索引、上传媒资 | **首选** |
+| **阿里云百炼 RunVideoAnalysis / SubmitVideoAnalysisTask** | ⭐⭐ 理解非检索 | 2 个免费并发，多模态 2.8 元/小时 | 低：项目已有 DashScope | 降级方案 |
+| **火山引擎视频理解** | ⭐⭐ 高光提取+检索 | 按量计费 | 中：项目已有 Volcengine 代理 | 备选 |
+| **Towhee + Milvus + CLIP4Clip 开源** | ⭐⭐⭐ 功能完整 | 免费 | 高：需 Python 后端、向量库、GPU | 自建可选 |
+| **Azure 视频索引器** | ⭐⭐⭐ 功能完整 | 600–2400 分钟免费 | 中：国外服务 | 备选 |
+
+**推荐实现顺序**：
+
+1. **阿里云 IMS SearchMediaByMultimodal**（首选）
+   - 支持自然语言查询 → 返回 MediaId、From/To 时间戳、Score
+   - 需开通智能媒体服务，创建搜索库、大模型索引
+   - 文档：https://help.aliyun.com/zh/ims/developer-reference/api-ice-2020-11-09-searchmediabymultimodal
+
+2. **阿里云百炼 SubmitVideoAnalysisTask**（易实现）
+   - 视频理解、字幕提取、总结、自定义 prompt
+   - 2 个免费并发，适合小规模
+   - 输出为摘要/描述，可做「描述→前端关键词匹配」的降级方案，非精确时间戳检索
+
+3. **豆包/火山引擎**
+   - 有视频高光提取及检索方案，需查火山方舟具体 API
+   - 项目已有 Volcengine 代理，接入成本低
+
+4. **开源 Towhee + CLIP4Clip**
+   - 完全免费，需独立 Python 服务 + Milvus，实现复杂度高
+
 ### 4. 代理差异
 - **CutOS**: 无显式 HTTP 代理，API 为同源 Next.js 路由
 - **ai-shotlive**: Vite `proxy` 将 `/api` 转发到 Express `:3001`；另有 `/api/proxy/dashscope`、`/api/proxy/volcengine` 等第三方代理
@@ -79,9 +110,9 @@
 
 ## 三、建议修复项
 
-1. **添加 /api/cutos/captions**：实现视频字幕生成（可复用 Whisper 或接入 dashscope 语音识别）
-2. **media-panel**：在无 projectId / 无 TwelveLabs 时隐藏或禁用 NLP 搜索
-3. **统一样式**：确保所有 CutOS 组件使用 ai-shotlive 的 CSS 变量
+1. **添加 /api/cutos/captions**：✓ 已实现（server/src/routes/cutosAgent.ts）
+2. **media-panel**：✓ 已实现 - 无 projectId 时隐藏 NLP 搜索提示与结果，indexing 提示仅在 nlpAvailable 时显示
+3. **统一样式**：✓ 已实现 - media-panel、video-preview、timeline、export-modal 已统一使用 ai-shotlive CSS 变量
 4. **README**：更新迁移说明，明确与 CutOS 的差异和限制
 5. **UI 对齐 CutOS**：Editor Shell 与 Inspector Panel 的文案、动效、布局与 CutOS 原版保持一致（见上表）
 6. **react-resizable-panels v2 布局适配**：已修复。使用 PanelGroup/PanelResizeHandle (v2 API)，defaultSize 为数字 1-100 表示百分比。面板容器需 `min-w-0` 以允许 flex 子项正确收缩；Media/Inspector 面板需使用 ai-shotlive 的 CSS 变量 (--bg-elevated, --border-primary 等) 替代 Tailwind 语义 token

@@ -132,6 +132,12 @@ interface EditorContextType {
   captionStyle: 'classic' | 'tiktok';
   setCaptionStyle: (style: 'classic' | 'tiktok') => void;
   reindexMedia: (mediaId: string) => Promise<void>;
+  trackMuted: Record<string, boolean>;
+  trackLocked: Record<string, boolean>;
+  trackVisible: Record<string, boolean>;
+  setTrackMuted: (trackId: string, muted: boolean) => void;
+  setTrackLocked: (trackId: string, locked: boolean) => void;
+  setTrackVisible: (trackId: string, visible: boolean) => void;
 }
 
 const EditorContext = createContext<EditorContextType | null>(null);
@@ -156,6 +162,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [captionStyle, setCaptionStyle] = useState<'classic' | 'tiktok'>('tiktok');
   const [zoomLevel, setZoomLevel] = useState(100);
   const pixelsPerSecond = (PIXELS_PER_SECOND * zoomLevel) / 100;
+  const [trackMuted, setTrackMutedState] = useState<Record<string, boolean>>({});
+  const [trackLocked, setTrackLockedState] = useState<Record<string, boolean>>({});
+  const [trackVisible, setTrackVisibleState] = useState<Record<string, boolean>>({});
 
   const historyRef = useRef<TimelineClip[][]>([]);
   const historyIndexRef = useRef<number>(-1);
@@ -210,6 +219,16 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   const zoomIn = useCallback(() => setZoomLevel((p) => Math.min(500, p + 25)), []);
   const zoomOut = useCallback(() => setZoomLevel((p) => Math.max(25, p - 25)), []);
+  const setTrackMuted = useCallback((trackId: string, muted: boolean) => {
+    setTrackMutedState((prev) => ({ ...prev, [trackId]: muted }));
+  }, []);
+  const setTrackLocked = useCallback((trackId: string, locked: boolean) => {
+    setTrackLockedState((prev) => ({ ...prev, [trackId]: locked }));
+  }, []);
+  const setTrackVisible = useCallback((trackId: string, visible: boolean) => {
+    setTrackVisibleState((prev) => ({ ...prev, [trackId]: visible }));
+  }, []);
+
   const zoomToFit = useCallback(() => {
     if (timelineClips.length === 0) {
       setZoomLevel(100);
@@ -461,7 +480,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       playheadBasePixels >= c.startTime &&
       playheadBasePixels < c.startTime + c.duration
   );
-  const sortedClipsAtPlayhead = [...clipsAtPlayhead].sort(
+  // 过滤掉隐藏轨道上的片段，仅显示可见轨道的片段
+  const visibleClipsAtPlayhead = clipsAtPlayhead.filter(
+    (c) => trackVisible[c.trackId] !== false
+  );
+  const sortedClipsAtPlayhead = [...visibleClipsAtPlayhead].sort(
     (a, b) => tracks.indexOf(a.trackId) - tracks.indexOf(b.trackId)
   );
   const activeClip = sortedClipsAtPlayhead[0] ?? null;
@@ -542,6 +565,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     captionStyle,
     setCaptionStyle,
     reindexMedia,
+    trackMuted,
+    trackLocked,
+    trackVisible,
+    setTrackMuted,
+    setTrackLocked,
+    setTrackVisible,
   };
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

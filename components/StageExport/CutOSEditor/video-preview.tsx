@@ -70,7 +70,11 @@ export function VideoPreview() {
     captionStyle,
     getMediaForClip,
     projectResolution,
+    trackMuted,
   } = useEditor()
+
+  // 必须在所有 useRef/useEffect 之前声明，避免 "Cannot access 'useNextVideo' before initialization"
+  const [useNextVideo, setUseNextVideo] = useState(false) // Toggle between video elements
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const nextVideoRef = useRef<HTMLVideoElement>(null) // Buffer for next clip
@@ -79,7 +83,18 @@ export function VideoPreview() {
   const animationRef = useRef<number | null>(null)
   const lastActiveClipIdRef = useRef<string | null>(null)
   const lastBackgroundClipIdRef = useRef<string | null>(null)
-  const [useNextVideo, setUseNextVideo] = useState(false) // Toggle between video elements
+
+  // 当轨道静音状态变化时，立即同步 video.muted（确保静音生效）
+  const shouldMuteAudio = activeClip?.trackId ? (trackMuted[activeClip.trackId] ?? false) : false
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = useNextVideo || shouldMuteAudio
+    }
+    if (nextVideoRef.current) {
+      nextVideoRef.current.muted = !useNextVideo || shouldMuteAudio
+    }
+  }, [shouldMuteAudio, useNextVideo])
+
   const isPreloadedRef = useRef(false) // Track if next clip is preloaded and ready
   const nextClipIdRef = useRef<string | null>(null) // Track which clip is preloaded
   const seamlessCanvasRef = useRef<HTMLCanvasElement>(null) // Canvas for guaranteed seamless playback
@@ -1120,7 +1135,7 @@ export function VideoPreview() {
                 style={{ display: 'none' }}
                 onLoadedMetadata={handleLoadedMetadata}
                 onCanPlay={handleCanPlay}
-                muted={useNextVideo}
+                muted={useNextVideo || (activeClip?.trackId ? (trackMuted[activeClip.trackId] ?? false) : false)}
                 playsInline
               />
               <video
@@ -1129,7 +1144,7 @@ export function VideoPreview() {
                 src={previewMedia.objectUrl}
                 crossOrigin="anonymous"
                 style={{ display: 'none' }}
-                muted={!useNextVideo}
+                muted={!useNextVideo || (activeClip?.trackId ? (trackMuted[activeClip.trackId] ?? false) : false)}
                 playsInline
               />
               {/* Canvas for seamless playback - draws from active video */}
@@ -1150,7 +1165,7 @@ export function VideoPreview() {
               )}
               {/* Debug indicator when eyedropper is active */}
               {isEyedropperActive && (
-                <div className="absolute top-2 left-2 z-20 rounded bg-primary/90 px-2 py-1 text-xs text-primary-foreground">
+                <div className="absolute top-2 left-2 z-20 rounded bg-[var(--accent)]/90 px-2 py-1 text-xs text-[var(--accent-on)]">
                   Click on video to sample color
                 </div>
               )}
@@ -1263,7 +1278,7 @@ export function VideoPreview() {
                       >
                         {/* Progress bar */}
                         <div
-                          className="absolute left-0 top-0 h-full rounded-full bg-primary"
+                          className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent)]"
                           style={{ width: `${progressPercent}%` }}
                         />
 
@@ -1318,8 +1333,8 @@ export function VideoPreview() {
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
-                <Film className="mx-auto mb-2 h-16 w-16 text-muted-foreground" />
-                <div className="text-sm text-muted-foreground">
+                <Film className="mx-auto mb-2 h-16 w-16 text-[var(--text-muted)]" />
+                <div className="text-sm text-[var(--text-muted)]">
                   {hasClips ? "Move playhead over a clip" : "Drop media on timeline to preview"}
                 </div>
               </div>
@@ -1329,32 +1344,32 @@ export function VideoPreview() {
       </div>
 
       {/* Transport Controls */}
-      <div className="shrink-0 border-t border-border bg-card px-6 py-4">
+      <div className="shrink-0 border-t border-[var(--border-primary)] bg-[var(--bg-elevated)] px-6 py-4">
         <div className="mx-auto max-w-5xl">
           {/* Playhead Scrubber */}
           <div className="mb-3 flex items-center gap-3">
-            <div className="font-mono text-xs text-muted-foreground w-16">
+            <div className="font-mono text-xs text-[var(--text-muted)] w-16">
               {formatTime(displayTime)}
             </div>
             <div
               ref={scrubberRef}
-              className="relative h-1 flex-1 cursor-pointer rounded-full bg-secondary/50"
+              className="relative h-1 flex-1 cursor-pointer rounded-full bg-[var(--bg-secondary)]/50"
               onClick={handleScrubberClick}
               onMouseDown={handleScrubberDrag}
             >
               {/* Progress bar */}
               <div
-                className="absolute left-0 top-0 h-full rounded-full bg-primary"
+                className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent)]"
                 style={{ width: `${progressPercent}%` }}
               />
 
               {/* Playhead handle */}
               <div
-                className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-background"
+                className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--accent)] ring-2 ring-[var(--bg-primary)]"
                 style={{ left: `${progressPercent}%` }}
               />
             </div>
-            <div className="font-mono text-xs text-muted-foreground w-16 text-right">
+            <div className="font-mono text-xs text-[var(--text-muted)] w-16 text-right">
               {formatTime(Math.max(timelineEndTime, displayTime, 1))}
             </div>
           </div>
@@ -1363,29 +1378,29 @@ export function VideoPreview() {
           <div className="flex items-center justify-center gap-2">
             <button
               onClick={handleSkipBack}
-              className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="rounded-md p-2 text-[var(--text-muted)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               disabled={!hasClips}
             >
               <SkipBack className="h-4 w-4" />
             </button>
             <button
               onClick={handlePlayPause}
-              className="rounded-md bg-primary p-3 text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="rounded-md bg-[var(--accent)] p-3 text-[var(--accent-on)] hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               disabled={!hasClips}
             >
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
             </button>
             <button
               onClick={handleSkipForward}
-              className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="rounded-md p-2 text-[var(--text-muted)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               disabled={!hasClips}
             >
               <SkipForward className="h-4 w-4" />
             </button>
-            <div className="w-px h-6 bg-border mx-1" />
+            <div className="w-px h-6 bg-[var(--border-primary)] mx-1" />
             <button
               onClick={toggleFullscreen}
-              className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
+              className="rounded-md p-2 text-[var(--text-muted)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
               title={isFullscreen ? "Exit fullscreen (ESC)" : "Enter fullscreen (F)"}
             >
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}

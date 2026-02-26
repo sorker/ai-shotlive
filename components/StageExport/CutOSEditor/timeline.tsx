@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Video, Volume2, Lock, Eye, Film, Trash2, Scissors, Undo2, Redo2, Copy, Clipboard } from "lucide-react"
+import { Video, Volume2, VolumeX, Lock, Unlock, Eye, EyeOff, Film, Trash2, Scissors, Undo2, Redo2, Copy, Clipboard } from "lucide-react"
 import { motion } from "framer-motion"
 import { Button } from "./ui/button"
 import { useEditor, TimelineClip, PIXELS_PER_SECOND, DEFAULT_CLIP_TRANSFORM, DEFAULT_CLIP_EFFECTS } from "./editor-context"
@@ -37,6 +37,12 @@ export function Timeline() {
     zoomOut,
     zoomToFit,
     pixelsPerSecond,
+    trackMuted,
+    trackLocked,
+    trackVisible,
+    setTrackMuted,
+    setTrackLocked,
+    setTrackVisible,
   } = useEditor()
 
   // Editing actions
@@ -65,15 +71,19 @@ export function Timeline() {
   // Local state for smooth playhead animation
   const [localPlayheadPosition, setLocalPlayheadPosition] = useState(currentTime * pixelsPerSecond)
   const animationRef = useRef<number | null>(null)
+  const currentTimeRef = useRef(currentTime)
 
-  // Sync local position with context when not playing or when currentTime/zoom changes
+  // 保持 ref 与 context 同步，供动画回调读取最新值
+  currentTimeRef.current = currentTime
+
+  // Sync local position when not playing or when zoom changes
   useEffect(() => {
     if (!isPlaying) {
       setLocalPlayheadPosition(currentTime * pixelsPerSecond)
     }
   }, [currentTime, isPlaying, pixelsPerSecond])
 
-  // Animate playhead smoothly during playback
+  // 播放时用 requestAnimationFrame 平滑更新播放头，不依赖 currentTime 避免每帧重启 effect
   useEffect(() => {
     if (!isPlaying) {
       if (animationRef.current) {
@@ -84,8 +94,8 @@ export function Timeline() {
     }
 
     const animate = () => {
-      // Read current time from context and update local position
-      setLocalPlayheadPosition(currentTime * pixelsPerSecond)
+      const t = currentTimeRef.current
+      setLocalPlayheadPosition(t * pixelsPerSecond)
       animationRef.current = requestAnimationFrame(animate)
     }
 
@@ -97,9 +107,24 @@ export function Timeline() {
         animationRef.current = null
       }
     }
-  }, [isPlaying, currentTime, pixelsPerSecond])
+  }, [isPlaying, pixelsPerSecond])
 
   const playheadPosition = localPlayheadPosition
+
+  // 播放时自动滚动时间轴，使播放头保持可见
+  useEffect(() => {
+    if (!isPlaying || !timelineRef.current) return
+    const el = timelineRef.current
+    const viewportWidth = el.clientWidth
+    const scrollLeft = el.scrollLeft
+    const scrollRight = scrollLeft + viewportWidth
+    // 当播放头接近右边缘时向右滚动，接近左边缘时向左滚动
+    if (playheadPosition > scrollRight - 100) {
+      el.scrollLeft = playheadPosition - viewportWidth + 100
+    } else if (playheadPosition < scrollLeft + 80) {
+      el.scrollLeft = Math.max(0, playheadPosition - 80)
+    }
+  }, [isPlaying, playheadPosition])
 
   const [draggedClip, setDraggedClip] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState(0)
@@ -148,6 +173,7 @@ export function Timeline() {
     
     const clip = timelineClips.find(c => c.id === clipId)
     if (!clip || !timelineRef.current) return
+    if (trackLocked[clip.trackId]) return
     
     const timelineRect = timelineRef.current.getBoundingClientRect()
     const mouseXInTimeline = e.clientX - timelineRect.left - 96
@@ -161,7 +187,7 @@ export function Timeline() {
       initialMediaOffset: clip.mediaOffset,
     })
     setSelectedClipId(clipId)
-  }, [timelineClips, setSelectedClipId])
+  }, [timelineClips, setSelectedClipId, trackLocked])
 
   const handleClipContextMenu = useCallback((e: React.MouseEvent, clipId: string) => {
     e.preventDefault()
@@ -180,6 +206,11 @@ export function Timeline() {
       return
     }
     
+    const clip = timelineClips.find(c => c.id === clipId)
+    if (!clip) return
+    // Don't allow drag when track is locked
+    if (trackLocked[clip.trackId]) return
+    
     e.preventDefault() // Prevent text selection and default drag behavior
     e.stopPropagation()
     setContextMenu(null) // Close context menu on any click
@@ -187,8 +218,6 @@ export function Timeline() {
     
     // Calculate offset relative to timeline, not the clip itself
     const timelineRect = timelineRef.current.getBoundingClientRect()
-    const clip = timelineClips.find(c => c.id === clipId)
-    if (!clip) return
     
     // Calculate where the mouse is within the timeline (visual pixels)
     const mouseXInTimeline = e.clientX - timelineRect.left - 96 // Subtract track label width
@@ -539,6 +568,11 @@ export function Timeline() {
     (e: React.DragEvent, trackId: string) => {
       e.preventDefault()
       e.stopPropagation()
+      if (trackLocked[trackId]) {
+        setDropTargetTrack(null)
+        setDragPreview(null)
+        return
+      }
       
       // Use the preview position if available (which includes snapping)
       const previewPosition = dragPreview?.x
@@ -616,7 +650,7 @@ export function Timeline() {
 
       addClipToTimeline(newClip)
     },
-    [mediaFiles, timelineClips, addClipToTimeline, dragPreview, pixelsPerSecond]
+    [mediaFiles, timelineClips, addClipToTimeline, dragPreview, pixelsPerSecond, trackLocked]
   )
 
   // Calculate time from mouse position
@@ -772,17 +806,17 @@ export function Timeline() {
   return (
     <div className="flex h-full flex-col">
       {/* Timeline Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
+      <div className="flex items-center justify-between border-b border-[var(--border-primary)] px-4 py-2">
         <div className="flex items-center gap-3">
-          <div className="text-xs font-medium text-foreground">Timeline</div>
+          <div className="text-xs font-medium text-[var(--text-primary)]">Timeline</div>
           {/* Editing Toolbar */}
-          <div className="flex items-center gap-1 border-l border-border pl-3 ml-3">
+          <div className="flex items-center gap-1 border-l border-[var(--border-primary)] pl-3 ml-3">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
                 variant={activeClip ? "default" : "ghost"}
                 size="sm"
                 className={`h-7 w-7 p-0 transition-colors ${
-                  activeClip ? "bg-primary text-primary-foreground shadow-md" : ""
+                  activeClip ? "bg-[var(--accent)] text-[var(--accent-on)] shadow-md" : ""
                 }`}
                 onClick={handleCut}
                 disabled={!activeClip}
@@ -803,7 +837,7 @@ export function Timeline() {
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </motion.div>
-            <div className="w-px h-3 bg-border mx-0.5" />
+            <div className="w-px h-3 bg-[var(--border-primary)] mx-0.5" />
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
                 variant="ghost"
@@ -828,7 +862,7 @@ export function Timeline() {
                 <Redo2 className="h-3.5 w-3.5" />
               </Button>
             </motion.div>
-            <div className="w-px h-3 bg-border mx-0.5" />
+            <div className="w-px h-3 bg-[var(--border-primary)] mx-0.5" />
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
                 variant="ghost"
@@ -854,14 +888,14 @@ export function Timeline() {
               </Button>
             </motion.div>
           </div>
-          <div className="font-mono text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded">
+          <div className="font-mono text-xs text-[var(--text-muted)] bg-[var(--bg-secondary)] px-2 py-0.5 rounded">
             {formatRulerTime(currentTime)}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <motion.button 
             onClick={zoomToFit}
-            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
+            className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             title="Zoom to fit all clips"
@@ -872,20 +906,20 @@ export function Timeline() {
             <motion.button 
               onClick={zoomOut}
               disabled={zoomLevel <= 25}
-              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               whileHover={{ scale: zoomLevel > 25 ? 1.05 : 1 }}
               whileTap={{ scale: zoomLevel > 25 ? 0.95 : 1 }}
               title="Zoom out (max 10 minutes)"
             >
               −
             </motion.button>
-            <div className="px-2 text-xs text-muted-foreground font-mono min-w-[48px] text-center">
+            <div className="px-2 text-xs text-[var(--text-muted)] font-mono min-w-[48px] text-center">
               {zoomLevel}%
             </div>
             <motion.button 
               onClick={zoomIn}
               disabled={zoomLevel >= 500}
-              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               whileHover={{ scale: zoomLevel < 500 ? 1.05 : 1 }}
               whileTap={{ scale: zoomLevel < 500 ? 0.95 : 1 }}
               title="Zoom in (max detail)"
@@ -897,29 +931,62 @@ export function Timeline() {
       </div>
 
       {/* Timeline Tracks */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Track Labels */}
-        <div className="w-24 border-r border-border bg-secondary">
-          {tracks.map((track) => (
-            <div key={track} className="flex h-12 items-center gap-2 border-b border-border px-2">
-              <div className="flex items-center gap-1">
-                {track.startsWith("V") ? (
-                  <Video className="h-3 w-3 text-muted-foreground" />
-                ) : (
-                  <Volume2 className="h-3 w-3 text-muted-foreground" />
-                )}
-                <Lock className="h-2.5 w-2.5 text-muted-foreground/50" />
-                <Eye className="h-2.5 w-2.5 text-muted-foreground/50" />
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        {/* Track Labels - 与右侧轨道对齐：先 ruler 占位 (h-6)，再 4 轨道 (h-12) */}
+        <div className="w-24 shrink-0 flex flex-col border-r border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+          {/* Ruler spacer - 与时间标尺等高 */}
+          <div className="h-6 shrink-0 border-b border-[var(--border-primary)]" />
+          {tracks.map((track) => {
+            const isMuted = trackMuted[track] ?? false
+            const isLocked = trackLocked[track] ?? false
+            const isVisible = trackVisible[track] ?? true
+            return (
+              <div key={track} className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border-primary)] px-2">
+                <div className="flex items-center gap-0.5 shrink-0">
+                  {/* 静音按钮 - 扩大点击区域 */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setTrackMuted(track, !isMuted) }}
+                    className={`min-w-[22px] min-h-[22px] flex items-center justify-center rounded cursor-pointer transition-colors ${isMuted ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                    title={isMuted ? "取消静音" : "静音轨道"}
+                  >
+                    {track.startsWith("V") ? (
+                      <Video className="h-3 w-3" />
+                    ) : isMuted ? (
+                      <VolumeX className="h-3 w-3" />
+                    ) : (
+                      <Volume2 className="h-3 w-3" />
+                    )}
+                  </button>
+                  {/* 锁定按钮 */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setTrackLocked(track, !isLocked) }}
+                    className={`min-w-[22px] min-h-[22px] flex items-center justify-center rounded cursor-pointer transition-colors ${isLocked ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                    title={isLocked ? "解锁轨道" : "锁定轨道"}
+                  >
+                    {isLocked ? <Lock className="h-2.5 w-2.5" /> : <Unlock className="h-2.5 w-2.5" />}
+                  </button>
+                  {/* 显示/隐藏按钮 */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setTrackVisible(track, !isVisible) }}
+                    className={`min-w-[22px] min-h-[22px] flex items-center justify-center rounded cursor-pointer transition-colors ${!isVisible ? "text-[var(--text-muted)]/50" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                    title={isVisible ? "隐藏轨道" : "显示轨道"}
+                  >
+                    {isVisible ? <Eye className="h-2.5 w-2.5" /> : <EyeOff className="h-2.5 w-2.5" />}
+                  </button>
+                </div>
+                <div className={`text-xs font-medium truncate ${!isVisible ? "text-[var(--text-muted)]/50" : "text-[var(--text-primary)]"}`}>{track}</div>
               </div>
-              <div className="text-xs font-medium text-foreground">{track}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
-        {/* Timeline Grid */}
+        {/* Timeline Grid - scroll-smooth 实现平滑滚动 */}
         <div
           ref={timelineRef}
-          className={`relative flex-1 overflow-x-auto scrollbar-thin select-none ${
+          className={`relative flex-1 min-w-0 overflow-x-auto overflow-y-hidden scrollbar-thin select-none scroll-smooth ${
             isScrubbing ? "cursor-ew-resize" : trimState ? "cursor-ew-resize" : draggedClip ? "cursor-grabbing" : dropTargetTrack ? "cursor-copy" : ""
           }`}
           onMouseDown={handleTimelineMouseDown}
@@ -931,7 +998,7 @@ export function Timeline() {
           } as React.CSSProperties}
         >
           {/* Time Ruler - Dynamic based on zoom level */}
-          <div className="sticky top-0 z-10 flex h-6 border-b border-border bg-card">
+          <div className="sticky top-0 z-10 flex h-6 shrink-0 border-b border-[var(--border-primary)] bg-[var(--bg-elevated)]">
             {(() => {
               // Calculate ruler segments based on zoom
               // At 100% zoom: 10px/sec, show every 8 seconds (80px segments)
@@ -946,8 +1013,8 @@ export function Timeline() {
               const numSegments = Math.ceil(maxTimelineSeconds / secondsPerSegment)
               
               return Array.from({ length: numSegments }).map((_, i) => (
-                <div key={i} className="shrink-0 border-r border-border" style={{ width: `${segmentWidth}px` }}>
-                  <div className="px-2 text-[10px] text-muted-foreground">
+                <div key={i} className="shrink-0 border-r border-[var(--border-primary)]" style={{ width: `${segmentWidth}px` }}>
+                  <div className="px-2 text-[10px] text-[var(--text-muted)]">
                     {formatRulerTime(i * secondsPerSegment)}
                   </div>
                 </div>
@@ -957,22 +1024,33 @@ export function Timeline() {
 
           {/* Tracks Content */}
           <div className="relative">
-            {tracks.map((track, index) => (
+            {tracks.map((track, index) => {
+              const isLocked = trackLocked[track] ?? false
+              const isVisible = trackVisible[track] ?? true
+              return (
               <div
                 key={track}
-                className={`flex h-12 border-b transition-all relative ${
+                className={`flex h-12 shrink-0 border-b transition-all relative ${
                   dropTargetTrack === track 
                     ? "bg-blue-500/20 border-blue-400 shadow-inner ring-1 ring-blue-400/50 ring-inset" 
-                    : "border-border"
-                }`}
+                    : "border-[var(--border-primary)]"
+                } ${!isVisible ? "opacity-40 pointer-events-none" : ""}`}
                 style={{
                   background: dropTargetTrack === track 
                     ? undefined 
                     : index < 2 ? "oklch(0.10 0 0)" : "oklch(0.12 0 0)",
                 }}
-                onDragOver={(e) => handleTrackDragOver(e, track)}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = isLocked ? 'none' : 'copy'
+                  if (!isLocked) handleTrackDragOver(e, track)
+                  else setDropTargetTrack(null)
+                }}
                 onDragLeave={handleTrackDragLeave}
-                onDrop={(e) => handleTrackDrop(e, track)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (!isLocked) handleTrackDrop(e, track)
+                }}
               >
                 {/* Drop zone indicator */}
                 {dropTargetTrack === track && (
@@ -987,7 +1065,7 @@ export function Timeline() {
                     const numSegments = Math.ceil(maxTimelineSeconds / secondsPerSegment)
                     
                     return Array.from({ length: numSegments }).map((_, i) => (
-                      <div key={i} className="shrink-0 border-r border-border/30" style={{ width: `${segmentWidth}px` }} />
+                      <div key={i} className="shrink-0 border-r border-[var(--border-primary)]/30" style={{ width: `${segmentWidth}px` }} />
                     ))
                   })()}
                 </div>
@@ -997,8 +1075,8 @@ export function Timeline() {
                   <div
                     className={`absolute z-30 mx-1 my-1.5 h-9 rounded-lg border-2 pointer-events-none transition-all shadow-2xl ${
                       dragPreview.isSnapped 
-                        ? "border-solid border-green-400 bg-green-400/40 ring-2 ring-green-400/50 ring-offset-1 ring-offset-background" 
-                        : "border-dashed border-blue-400 bg-blue-400/30 ring-2 ring-blue-400/40 ring-offset-1 ring-offset-background animate-pulse"
+                        ? "border-solid border-green-400 bg-green-400/40 ring-2 ring-green-400/50 ring-offset-1 ring-offset-[var(--bg-primary)]" 
+                        : "border-dashed border-blue-400 bg-blue-400/30 ring-2 ring-blue-400/40 ring-offset-1 ring-offset-[var(--bg-primary)] animate-pulse"
                     }`}
                     style={{ left: `${dragPreview.x}px`, width: `${dragPreview.duration}px` }}
                   >
@@ -1087,7 +1165,7 @@ export function Timeline() {
                       onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
                       onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
                         className={`absolute z-10 mx-1 my-1.5 h-9 rounded border overflow-hidden group ${
-                        clip.type === "video" ? "bg-primary/80 border-primary" : "bg-chart-2/80 border-chart-2"
+                        clip.type === "video" ? "bg-[var(--accent)]/80 border-[var(--accent)]" : "bg-[var(--info)]/80 border-[var(--info)]"
                         } ${draggedClip === clip.id ? "opacity-70 cursor-grabbing z-50" : trimState?.clipId === clip.id ? "cursor-ew-resize z-50" : "cursor-grab"} ${
                           selectedClipId === clip.id ? "ring-2 ring-white" : ""
                         } ${activeClip?.id === clip.id ? "ring-2 ring-red-500/50" : ""}`}
@@ -1102,22 +1180,22 @@ export function Timeline() {
                                 className="h-6 w-10 object-cover rounded-sm shrink-0"
                               />
                             ) : (
-                              <Film className="h-3 w-3 text-primary-foreground/80 shrink-0" />
+                              <Film className="h-3 w-3 text-[var(--accent-on)]/80 shrink-0" />
                             )}
-                            <div className="text-[10px] font-medium text-primary-foreground truncate">
+                            <div className="text-[10px] font-medium text-[var(--accent-on)] truncate">
                               {clip.label}
                             </div>
                         </div>
                       ) : (
                         <div className="h-full">
                           <div className="flex h-full items-center gap-1.5 px-2">
-                              <Volume2 className="h-3 w-3 shrink-0 text-foreground/60" />
+                              <Volume2 className="h-3 w-3 shrink-0 text-[var(--text-primary)]/60" />
                             {/* Simple waveform visualization */}
                             <div className="flex h-full flex-1 items-center gap-px">
                                 {Array.from({ length: Math.min(40, Math.floor(clip.duration / 8)) }).map((_, i) => (
                                 <div
                                   key={i}
-                                  className="flex-1 bg-foreground/60"
+                                  className="flex-1 bg-[var(--text-primary)]/60"
                                   style={{ height: `${30 + Math.random() * 70}%` }}
                                 />
                               ))}
@@ -1165,7 +1243,8 @@ export function Timeline() {
                     )
                   })}
               </div>
-            ))}
+            )
+          })}
 
             {/* Playhead - synced with video */}
             <div
@@ -1174,7 +1253,7 @@ export function Timeline() {
             >
               {/* Draggable playhead handle */}
               <div 
-                className="absolute -top-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-red-500 ring-2 ring-background shadow-lg cursor-ew-resize hover:scale-125 transition-transform select-none"
+                className="absolute -top-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-red-500 ring-2 ring-[var(--bg-primary)] shadow-lg cursor-ew-resize hover:scale-125 transition-transform select-none"
                 onMouseDown={(e) => {
                   e.stopPropagation()
                   e.preventDefault() // Prevent text selection
@@ -1199,7 +1278,7 @@ export function Timeline() {
       {/* Empty state hint */}
       {timelineClips.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center text-muted-foreground/50">
+          <div className="text-center text-[var(--text-muted)]/50">
             <Film className="h-8 w-8 mx-auto mb-2" />
             <p className="text-sm">Drag media here to start editing</p>
           </div>
@@ -1209,12 +1288,12 @@ export function Timeline() {
       {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed z-50 bg-popover border border-border rounded-md shadow-lg py-1 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150"
+          className="fixed z-50 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-md shadow-lg py-1 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
-            className="w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2 cursor-pointer"
+            className="w-full px-3 py-2 text-sm text-left hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] flex items-center gap-2 cursor-pointer"
             onClick={() => {
               const clip = timelineClips.find(c => c.id === contextMenu.clipId)
               if (clip) {
@@ -1226,10 +1305,10 @@ export function Timeline() {
           >
             <Scissors className="h-3.5 w-3.5" />
             Split at Playhead
-            <span className="ml-auto text-xs text-muted-foreground">S</span>
+            <span className="ml-auto text-xs text-[var(--text-muted)]">S</span>
           </button>
           <button
-            className="w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2 cursor-pointer"
+            className="w-full px-3 py-2 text-sm text-left hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] flex items-center gap-2 cursor-pointer"
             onClick={() => {
               copyClip(contextMenu.clipId)
               setContextMenu(null)
@@ -1237,11 +1316,11 @@ export function Timeline() {
           >
             <Copy className="h-3.5 w-3.5" />
             Copy
-            <span className="ml-auto text-xs text-muted-foreground">Ctrl+C</span>
+            <span className="ml-auto text-xs text-[var(--text-muted)]">Ctrl+C</span>
           </button>
-          <div className="h-px bg-border my-1" />
+          <div className="h-px bg-[var(--border-primary)] my-1" />
           <button
-            className="w-full px-3 py-2 text-sm text-left hover:bg-destructive hover:text-destructive-foreground flex items-center gap-2 cursor-pointer"
+            className="w-full px-3 py-2 text-sm text-left hover:bg-[var(--error-bg)] hover:text-[var(--error-text)] flex items-center gap-2 cursor-pointer"
             onClick={() => {
               removeClip(contextMenu.clipId)
               setContextMenu(null)
@@ -1249,7 +1328,7 @@ export function Timeline() {
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
-            <span className="ml-auto text-xs text-muted-foreground">Del</span>
+            <span className="ml-auto text-xs text-[var(--text-muted)]">Del</span>
           </button>
         </div>
       )}

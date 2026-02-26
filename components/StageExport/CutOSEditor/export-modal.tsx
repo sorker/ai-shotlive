@@ -702,8 +702,8 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
 
         {!hasClips ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <Film className="h-12 w-12 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">
+            <Film className="h-12 w-12 text-[var(--text-muted)] mb-3" />
+            <p className="text-sm text-[var(--text-muted)]">
               Add clips to the timeline before exporting
             </p>
           </div>
@@ -720,8 +720,8 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
                     disabled={isExporting}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 ${
                       format === f
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-foreground hover:bg-secondary/80"
+                        ? "bg-[var(--accent)] text-[var(--accent-on)]"
+                        : "bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80"
                     }`}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -749,15 +749,15 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
                     disabled={isExporting}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors cursor-pointer disabled:opacity-50 ${
                       quality === q
-                        ? "bg-primary/10 text-primary border border-primary/30"
-                        : "bg-secondary/50 text-foreground hover:bg-secondary"
+                        ? "bg-[var(--accent-bg)] text-[var(--accent)] border border-[var(--accent)]/30"
+                        : "bg-[var(--bg-secondary)]/50 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
                     }`}
                     whileHover={{ x: 2 }}
                     whileTap={{ scale: 0.99 }}
                     transition={{ type: "spring", stiffness: 400, damping: 17 }}
                   >
                     <span className="capitalize">{q}</span>
-                    <span className="text-xs text-muted-foreground">{settings.label.split("(")[1]?.replace(")", "")}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{settings.label.split("(")[1]?.replace(")", "")}</span>
                   </motion.button>
                 ))}
               </div>
@@ -773,18 +773,18 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
                   className="space-y-2"
                 >
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Exporting...</span>
+                    <span className="text-[var(--text-muted)]">Exporting...</span>
                     <span className="font-mono">{progress}%</span>
                   </div>
-                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div className="h-2 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
                     <motion.div
-                      className="h-full bg-primary"
+                      className="h-full bg-[var(--accent)]"
                       initial={{ width: 0 }}
                       animate={{ width: `${progress}%` }}
                       transition={{ type: "spring", stiffness: 100, damping: 20 }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-[var(--text-muted)]">
                     {supportsVideoFrameCallback
                       ? "Using frame-accurate rendering"
                       : "Export runs at 1x speed"}
@@ -800,7 +800,7 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md"
+                  className="flex items-center gap-2 text-sm text-[var(--error-text)] bg-[var(--error-bg)] px-3 py-2 rounded-md"
                 >
                   <AlertCircle className="h-4 w-4" />
                   {error}
@@ -832,7 +832,7 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
         <div className="flex justify-end gap-2 mt-4">
           <motion.button
             onClick={handleCancel}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 transition-colors cursor-pointer"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -843,7 +843,7 @@ export function ExportModal({ open, onOpenChange }: ExportModalProps) {
             <motion.button
               onClick={handleExport}
               disabled={isExporting}
-              className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--accent)] text-[var(--accent-on)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
               whileHover={!isExporting ? { scale: 1.02 } : {}}
               whileTap={!isExporting ? { scale: 0.98 } : {}}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
