@@ -8,8 +8,8 @@ WORKDIR /app
 # 复制 package.json 和 package-lock.json (如果存在)
 COPY package*.json ./
 
-# 安装依赖
-RUN npm install
+# 安装依赖 (使用 --legacy-peer-deps 解决 react-beautiful-dnd 与 React 19 的 peer dependency 冲突)
+RUN npm install --legacy-peer-deps
 
 # 复制所有源代码
 COPY . .
@@ -27,7 +27,7 @@ WORKDIR /app
 
 # 复制 package.json 用于安装生产依赖
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
 
 # 从构建阶段复制前端构建产物
 COPY --from=builder /app/dist ./dist
