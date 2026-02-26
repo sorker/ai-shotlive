@@ -38,6 +38,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
   const [isDataImporting, setIsDataImporting] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showVisualStyleManager, setShowVisualStyleManager] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const loadProjects = async () => {
@@ -81,9 +82,19 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
     fetchLibraryPage(libraryPage);
   }, [showLibraryModal, libraryPage, libraryFilter, libraryProjectFilter]);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
+    if (isCreating) return;
     const newProject = createNewProjectState();
-    onOpenProject(newProject);
+    setIsCreating(true);
+    try {
+      await saveProjectToDB(newProject);
+      onOpenProject(newProject);
+    } catch (e) {
+      console.error('创建项目失败:', e);
+      showAlert(`创建项目失败: ${e instanceof Error ? e.message : '未知错误'}`, { type: 'error' });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const requestDelete = (e: React.MouseEvent, id: string) => {
@@ -286,10 +297,11 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
             </button>
             <button 
               onClick={handleCreate}
-              className="group flex items-center gap-3 px-6 py-3 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] transition-colors"
+              disabled={isCreating}
+              className="group flex items-center gap-3 px-6 py-3 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Plus className="w-4 h-4" />
-              <span className="font-bold text-xs tracking-widest uppercase">新建项目</span>
+              {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              <span className="font-bold text-xs tracking-widest uppercase">{isCreating ? '创建中...' : '新建项目'}</span>
             </button>
           </div>
         </header>
@@ -303,13 +315,17 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
             
             {/* Create New Card */}
             <div 
-              onClick={handleCreate}
-              className="group cursor-pointer border border-[var(--border-primary)] hover:border-[var(--border-secondary)] bg-[var(--bg-primary)] flex flex-col items-center justify-center min-h-[280px] transition-all"
+              onClick={isCreating ? undefined : handleCreate}
+              className={`group flex flex-col items-center justify-center min-h-[280px] transition-all ${
+                isCreating 
+                  ? 'cursor-not-allowed opacity-60 border border-[var(--border-primary)] bg-[var(--bg-primary)]' 
+                  : 'cursor-pointer border border-[var(--border-primary)] hover:border-[var(--border-secondary)] bg-[var(--bg-primary)]'
+              }`}
             >
               <div className="w-12 h-12 border border-[var(--border-secondary)] flex items-center justify-center mb-6 group-hover:bg-[var(--bg-hover)] transition-colors">
-                <Plus className="w-5 h-5 text-[var(--text-tertiary)] group-hover:text-[var(--text-primary)]" />
+                {isCreating ? <Loader2 className="w-5 h-5 text-[var(--text-tertiary)] animate-spin" /> : <Plus className="w-5 h-5 text-[var(--text-tertiary)] group-hover:text-[var(--text-primary)]" />}
               </div>
-              <span className="text-[var(--text-muted)] font-mono text-[10px] uppercase tracking-widest group-hover:text-[var(--text-secondary)]">Create New Project</span>
+              <span className="text-[var(--text-muted)] font-mono text-[10px] uppercase tracking-widest group-hover:text-[var(--text-secondary)]">{isCreating ? '创建中...' : 'Create New Project'}</span>
             </div>
 
             {/* Project List */}
