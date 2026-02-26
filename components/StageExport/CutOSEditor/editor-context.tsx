@@ -106,6 +106,8 @@ interface EditorContextType {
   /** 跳转到指定时间，播放时也会更新内部基准，支持播放中点击时间线跳转 */
   seekTo: (time: number) => void;
   registerSeekHandler: (cb: ((time: number) => void) | null) => void;
+  /** 播放时每帧调用，用于准确计算 activeClip，避免节流导致片段边界错误 */
+  setPlaybackTimeRef: (t: number) => void;
   isPlaying: boolean;
   setIsPlaying: (playing: boolean) => void;
   isScrubbing: boolean;
@@ -173,6 +175,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const historyIndexRef = useRef<number>(-1);
   const copiedClipRef = useRef<TimelineClip | null>(null);
   const seekHandlerRef = useRef<((time: number) => void) | null>(null);
+  const playbackTimeRef = useRef(0); // 播放时每帧更新，供 activeClip 计算准确片段
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
 
   const seekTo = useCallback((time: number) => {
@@ -182,6 +185,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   const registerSeekHandler = useCallback((cb: ((time: number) => void) | null) => {
     seekHandlerRef.current = cb;
+  }, []);
+
+  const setPlaybackTimeRef = useCallback((t: number) => {
+    playbackTimeRef.current = t;
   }, []);
   const [canPasteState, setCanPasteState] = useState(false);
 
@@ -489,7 +496,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   }, [timelineEndTime, currentTime, isScrubbing, isPlaying]);
 
   const tracks = ['V2', 'V1', 'A2', 'A1'];
-  const playheadBasePixels = currentTime * PIXELS_PER_SECOND;
+  // 播放时用 playbackTimeRef 保证 activeClip 准确，避免节流导致片段边界处选错片段（无声音）
+  const effectiveTime = isPlaying ? playbackTimeRef.current : currentTime;
+  const playheadBasePixels = effectiveTime * PIXELS_PER_SECOND;
   const clipsAtPlayhead = sortedVideoClips.filter(
     (c) =>
       playheadBasePixels >= c.startTime &&
@@ -553,6 +562,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     setCurrentTime,
     seekTo,
     registerSeekHandler,
+    setPlaybackTimeRef,
     isPlaying,
     setIsPlaying,
     isScrubbing,

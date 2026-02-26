@@ -58,6 +58,7 @@ export function VideoPreview() {
     setCurrentTime,
     seekTo,
     registerSeekHandler,
+    setPlaybackTimeRef,
     activeClip,
     backgroundClip,
     clipTimeOffset,
@@ -166,6 +167,8 @@ export function VideoPreview() {
       startTime: performance.now(),
       startPosition: currentTime,
     }
+    playbackTimeRef.current = currentTime
+    setPlaybackTimeRef(currentTime) // 初始化，供 context 计算 activeClip
     lastSyncRef.current = 0 // 确保首帧立即同步
 
     const animate = (now: number) => {
@@ -184,6 +187,7 @@ export function VideoPreview() {
       }
 
       playbackTimeRef.current = newTime
+      setPlaybackTimeRef(newTime) // 每帧更新，供 context 用准确时间计算 activeClip
       // 节流：按 CutOS timeline 模式，减少 setState 频率，避免每帧触发 context 重渲染
       if (now - lastSyncRef.current >= SYNC_INTERVAL_MS) {
         lastSyncRef.current = now
@@ -202,7 +206,7 @@ export function VideoPreview() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, timelineEndTime, setCurrentTime, setIsPlaying])
+  }, [isPlaying, timelineEndTime, setCurrentTime, setIsPlaying, setPlaybackTimeRef])
 
   // Preload and prepare next clip for seamless transitions
   useEffect(() => {
