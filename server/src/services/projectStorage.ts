@@ -166,7 +166,7 @@ export async function saveProjectNormalized(
        raw_script, selected_episode_id, is_parsing_script,
        has_script_data, script_title, script_genre, script_logline, art_direction,
        created_at_ms, last_modified_ms, is_normalized
-     ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+     ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE
        title = VALUES(title),
        data = NULL,

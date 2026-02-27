@@ -43,6 +43,7 @@ export const parseScriptToData = async (
     Tasks:
     1. Extract title, genre, logline (in ${language}).
     2. Extract characters (id, name, gender, age, personality).
+       - personality MUST include appearance prototype if anthropomorphic/animal-based (e.g. 以猫为原型、拟人化狐狸、猫耳少女).
     3. Extract scenes (id, location, time, atmosphere).
     4. Break down the story into paragraphs linked to scenes.
     

@@ -487,8 +487,9 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
 
   const handleAddCharacterToShot = (shotId: string, characterId: string) => {
     const shot = project.shots.find(s => s.id === shotId);
-    if (shot && !shot.characters.includes(characterId)) {
-      const newChars = [...shot.characters, characterId];
+    const shotChars = Array.isArray(shot?.characters) ? shot.characters : [];
+    if (shot && !shotChars.includes(characterId)) {
+      const newChars = [...shotChars, characterId];
       const updatedShots = project.shots.map(s =>
         s.id === shotId ? { ...s, characters: newChars } : s
       );
@@ -500,7 +501,8 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
   const handleRemoveCharacterFromShot = (shotId: string, characterId: string) => {
     const shot = project.shots.find(s => s.id === shotId);
     if (shot) {
-      const newChars = shot.characters.filter(cid => cid !== characterId);
+      const shotChars = Array.isArray(shot.characters) ? shot.characters : [];
+      const newChars = shotChars.filter(cid => cid !== characterId);
       const updatedShots = project.shots.map(s =>
         s.id === shotId ? { ...s, characters: newChars } : s
       );

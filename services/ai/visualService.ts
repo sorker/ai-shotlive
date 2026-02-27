@@ -69,8 +69,8 @@ Create a comprehensive Art Direction Brief in JSON format. This brief will be in
 CRITICAL RULES:
 - All descriptions must be specific, concrete, and actionable for image generation AI
 - The brief must define a COHESIVE visual world - characters and scenes must look like they belong to the SAME production
+- If characters are anthropomorphic/animal-based (猫/狐/狗/拟人等 in personality), use "fur/feather color range" for skinTones; proportions/eyeStyle should suit animal characters
 - Color palette must be harmonious and genre-appropriate
-- Character design rules must ensure all characters share the same art style while being visually distinct from each other
 - Output all descriptive text in ${language}
 
 Output ONLY valid JSON with this exact structure:
@@ -339,9 +339,15 @@ CRITICAL RULES:
 Output ONLY the visual prompt text, no explanations.`;
   } else if (type === 'character') {
     const char = data as Character;
+    const anthropomorphicHint = `⚠️ APPEARANCE PROTOTYPE (HIGHEST PRIORITY):
+Personality may describe an ANIMAL/ANTHROPOMORPHIC prototype (e.g. 以猫为原型、拟人化狐狸、猫的形象、anthropomorphic cat).
+If personality mentions: 猫/狗/狐/动物/拟人/原型/species/prototype/anthropomorphic - the character MUST be that visual form.
+For anthropomorphic: describe animal ears, fur/feather color, tail, muzzle/face shape, paws - NOT human ethnicity/skin tone.
+For human: use ethnicity, skin tone, human facial features.`;
+
     prompt = `You are an expert AI prompt engineer for ${visualStyle} style image generation.
 ${artDirectionBlock}
-Create a detailed visual prompt for a character with the following structure:
+Create a detailed visual prompt for a character.
 
 Character Data:
 - Name: ${char.name}
@@ -349,26 +355,28 @@ Character Data:
 - Age: ${char.age}
 - Personality: ${char.personality}
 
-REQUIRED STRUCTURE (output in ${language}):
-1. Core Identity: [ethnicity, age, gender, body type${artDirection ? ` - MUST follow proportions: ${artDirection.characterDesignRules.proportions}` : ''}]
-2. Facial Features: [specific distinguishing features - eyes${artDirection ? ` (MUST follow eye style: ${artDirection.characterDesignRules.eyeStyle})` : ''}, nose, face shape, skin tone${artDirection ? ` (MUST use skin tones from: ${artDirection.colorPalette.skinTones})` : ''}]
-3. Hairstyle: [detailed hair description - color, length, style]
-4. Clothing: [detailed outfit appropriate for ${genre} genre${artDirection ? `, colors MUST harmonize with palette: ${artDirection.colorPalette.primary}, ${artDirection.colorPalette.secondary}` : ''}]
-5. Pose & Expression: [body language and facial expression matching personality]
-6. Technical Quality: ${stylePrompt}
+${anthropomorphicHint}
 
-CRITICAL RULES:
-- Sections 1-3 are FIXED features for consistency across all variations${artDirection ? `
-- MUST follow the Global Art Direction above for style consistency
-- Line/edge style: ${artDirection.characterDesignRules.lineWeight}
-- Detail density: ${artDirection.characterDesignRules.detailLevel}` : ''}
-- Use specific, concrete visual details
-- Output as single paragraph, comma-separated
-- MUST include style keywords: ${visualStyle}
-- Length: 60-90 words
-- Focus on visual details that can be rendered in images
+Choose structure based on personality (anthropomorphic vs human):
 
-Output ONLY the visual prompt text, no explanations.`;
+IF anthropomorphic/animal prototype (猫/狗/狐/拟人/动物原型 etc.):
+1. Species & Form: [animal type, anthropomorphic/humanoid body, key animal features - ears, tail, fur/feather pattern]
+2. Face & Features: [animal-inspired eyes, muzzle/nose, whiskers if applicable - NOT human ethnicity]
+3. Fur/Hair: [color, texture, markings]
+4. Clothing: [outfit for ${genre} genre${artDirection ? `, palette: ${artDirection.colorPalette.primary}, ${artDirection.colorPalette.secondary}` : ''}]
+5. Pose & Expression: [matching personality]
+6. Technical: ${stylePrompt}
+
+IF human character:
+1. Core Identity: [ethnicity, age, gender, body type${artDirection ? ` - proportions: ${artDirection.characterDesignRules.proportions}` : ''}]
+2. Facial Features: [eyes${artDirection ? ` (${artDirection.characterDesignRules.eyeStyle})` : ''}, nose, face shape, skin tone${artDirection ? ` (${artDirection.colorPalette.skinTones})` : ''}]
+3. Hairstyle: [color, length, style]
+4. Clothing: [outfit for ${genre} genre]
+5. Pose & Expression: [matching personality]
+6. Technical: ${stylePrompt}
+
+CRITICAL: Sections 1-3 are FIXED features. Output in ${language}, single paragraph, comma-separated, 60-90 words.
+MUST include ${visualStyle} style keywords. Output ONLY the prompt text.`;
   } else {
     const scene = data as Scene;
     prompt = `You are an expert cinematographer and AI prompt engineer for ${visualStyle} productions.

@@ -892,10 +892,13 @@ const applyResultToProject = async (
       case 'keyframe':
         if (target.entityId && target.shotId) {
           const filePath = resolveToFilePath(projectId, 'keyframe', target.entityId, base64Result, epId);
+          const kfType = (target.entityId as string).includes('-start') ? 'start' : 'end';
+          // 使用 INSERT ... ON DUPLICATE KEY UPDATE：前端可能尚未持久化该关键帧，行可能不存在
           await pool.execute(
-            `UPDATE shot_keyframes SET image_url = ?, status = 'completed'
-             WHERE id = ? AND shot_id = ? AND project_id = ? AND user_id = ? AND episode_id = ?`,
-            [filePath, target.entityId, target.shotId, projectId, userId, epId]
+            `INSERT INTO shot_keyframes (id, shot_id, project_id, user_id, episode_id, type, visual_prompt, image_url, status)
+             VALUES (?, ?, ?, ?, ?, ?, '', ?, 'completed')
+             ON DUPLICATE KEY UPDATE image_url = VALUES(image_url), status = 'completed'`,
+            [target.entityId, target.shotId, projectId, userId, epId, kfType, filePath]
           );
           console.log(`  📝 [TaskRunner] 关键帧已回写: ${target.entityId} → ${filePath ? '文件' : 'null'}`);
         }

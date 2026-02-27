@@ -51,6 +51,9 @@ const ShotRow: React.FC<Props> = ({
   onAddSubShot,
   onDeleteShot
 }) => {
+  // 防御：shot.characters 可能来自旧数据或异常 JSON 解析，确保始终为数组
+  const shotChars = Array.isArray(shot.characters) ? shot.characters : [];
+
   // 从shot.id中提取显示编号
   // 例如：shot-1 → "SHOT 001", shot-1-1 → "SHOT 001-1"
   const getShotDisplayNumber = () => {
@@ -179,10 +182,10 @@ const ShotRow: React.FC<Props> = ({
               <div className="space-y-2">
                 <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">当前角色</div>
                 <div className="flex flex-wrap gap-2">
-                  {shot.characters.length === 0 ? (
+                  {shotChars.length === 0 ? (
                     <span className="text-xs text-[var(--text-muted)] italic">无角色</span>
                   ) : (
-                    shot.characters.map(cid => {
+                    shotChars.map(cid => {
                       const char = scriptData?.characters.find(c => c.id === cid);
                       return char ? (
                         <div key={cid} className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-[var(--text-secondary)] border border-[var(--border-secondary)] px-2 py-1 rounded-md bg-[var(--bg-elevated)]">
@@ -205,7 +208,7 @@ const ShotRow: React.FC<Props> = ({
                 <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">添加角色</div>
                 <div className="flex flex-wrap gap-2">
                   {scriptData?.characters
-                    .filter(char => !shot.characters.includes(char.id))
+                    .filter(char => !shotChars.includes(char.id))
                     .map(char => (
                       <button
                         key={char.id}
@@ -217,7 +220,7 @@ const ShotRow: React.FC<Props> = ({
                         <span>{char.name}</span>
                       </button>
                     ))}
-                  {scriptData?.characters.filter(char => !shot.characters.includes(char.id)).length === 0 && (
+                  {scriptData?.characters.filter(char => !shotChars.includes(char.id)).length === 0 && (
                     <span className="text-xs text-[var(--text-muted)] italic">所有角色已添加</span>
                   )}
                 </div>
@@ -235,10 +238,10 @@ const ShotRow: React.FC<Props> = ({
             </div>
           ) : (
             <div className="flex flex-wrap gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-              {shot.characters.length === 0 ? (
+              {shotChars.length === 0 ? (
                 <span className="text-[10px] text-[var(--text-muted)] italic">无角色</span>
               ) : (
-                shot.characters.map(cid => {
+                shotChars.map(cid => {
                   const char = scriptData?.characters.find(c => c.id === cid);
                   return char ? (
                     <span key={cid} className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-tertiary)] border border-[var(--border-primary)] px-2 py-0.5 rounded-full bg-[var(--bg-elevated)]">

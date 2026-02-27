@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ProjectState, NovelChapter } from '../../types';
 import { readFileAsText, parseNovelToChapters } from '../../services/novelParser';
 import { fetchChaptersPaginated, fetchChapterContent } from '../../services/storageService';
-import { Upload, BookOpen, Trash2, ChevronDown, ChevronRight, FileText, AlertCircle, CheckCircle2, X, ChevronLeft, Loader2, Wand2, Settings2 } from 'lucide-react';
+import { generateNovelChapter } from '../../services/ai/novelScriptService';
+import { getActiveChatModel } from '../../services/modelRegistry';
+import { Upload, BookOpen, Trash2, ChevronDown, ChevronRight, FileText, AlertCircle, CheckCircle2, X, ChevronLeft, Loader2, Wand2, Settings2, Plus, Sparkles } from 'lucide-react';
 import * as PS from '../../services/projectPatchService';
 import OptionSelector from './OptionSelector';
-import { NOVEL_GENRE_OPTIONS, LANGUAGE_OPTIONS, STYLES } from './constants';
+import { NOVEL_GENRE_OPTIONS, NOVEL_LENGTH_OPTIONS, NOVEL_TONE_OPTIONS, LANGUAGE_OPTIONS, STYLES } from './constants';
 
 type VisualStyleOption = { label: string; value: string; desc?: string };
 
@@ -56,16 +58,37 @@ const NovelManager: React.FC<Props> = ({
   const [contentCache, setContentCache] = useState<Map<string, string>>(new Map());
   const [loadingContentId, setLoadingContentId] = useState<string | null>(null);
 
+  // AI 生成章节
+  const [generatingChapterId, setGeneratingChapterId] = useState<string | null>(null);
+
+  // AI 生成弹窗
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiModalChapter, setAiModalChapter] = useState<NovelChapter | null>(null);
+  const [aiModalUseRefPrev, setAiModalUseRefPrev] = useState(false);
+  const [aiModalPlotPrompt, setAiModalPlotPrompt] = useState('');
+  const [aiModalLength, setAiModalLength] = useState('single');
+  const [aiModalTone, setAiModalTone] = useState('default');
+  const [aiModalGenre, setAiModalGenre] = useState('');
+  const [aiModalCustomGenre, setAiModalCustomGenre] = useState('');
+
+  const activeChatModel = getActiveChatModel();
+  const model = activeChatModel?.id || project.shotGenerationModel || 'gpt-5.1';
   const totalPages = Math.max(1, Math.ceil(totalChapters / PAGE_SIZE));
 
-  // 从服务端分页加载章节
+  // 从服务端分页加载章节（合并本地新建但尚未同步到服务端的章节）
   const loadChaptersPage = useCallback(async (page: number) => {
     setIsLoadingPage(true);
     try {
       const data = await fetchChaptersPaginated(project.id, page, PAGE_SIZE);
-      setPaginatedChapters(data.chapters);
-      setTotalChapters(data.total);
-      setCurrentPage(data.page);
+      const serverIds = new Set(data.chapters.map((c: NovelChapter) => c.id));
+      const localOnly = (project.novelChapters || []).filter(ch => !serverIds.has(ch.id));
+      const allMerged = [...data.chapters, ...localOnly].sort((a, b) => a.index - b.index);
+      const total = Math.max(data.total, allMerged.length);
+      const start = (page - 1) * PAGE_SIZE;
+      const forPage = allMerged.slice(start, start + PAGE_SIZE);
+      setPaginatedChapters(forPage);
+      setTotalChapters(total);
+      setCurrentPage(page);
     } catch (err) {
       console.error('加载章节列表失败:', err);
       // 降级：使用 project state 中的轻量数据做本地分页
@@ -184,6 +207,31 @@ const NovelManager: React.FC<Props> = ({
     setCurrentPage(1);
   };
 
+  /** 新建章节：自动递增章节序号 */
+  const handleAddChapter = () => {
+    const nextIndex = totalChapters + 1;
+    const newChapter: NovelChapter = {
+      id: `novel-ch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      index: nextIndex,
+      reel: '正文卷',
+      title: '',
+      content: '',
+    };
+    const updatedChapters = [...(project.novelChapters || []), newChapter];
+    updateProject({ novelChapters: updatedChapters });
+    PS.addChapters(project.id, [newChapter]);
+    setContentCache(prev => new Map(prev).set(newChapter.id, ''));
+    const newTotal = totalChapters + 1;
+    setTotalChapters(newTotal);
+    const targetPage = Math.ceil(newTotal / PAGE_SIZE);
+    setCurrentPage(targetPage);
+    loadChaptersPage(targetPage).then(() => {
+      setExpandedChapterId(newChapter.id);
+      setEditingChapterId(newChapter.id);
+      setEditingContent('');
+    });
+  };
+
   const handleToggleChapter = async (chapterId: string) => {
     if (expandedChapterId === chapterId) {
       setExpandedChapterId(null);
@@ -218,6 +266,80 @@ const NovelManager: React.FC<Props> = ({
   const handleCancelEdit = () => {
     setEditingChapterId(null);
     setEditingContent('');
+  };
+
+  /** 获取上一章内容（用于 AI 参考） */
+  const getPrevChapterContent = useCallback(async (currentChapter: NovelChapter): Promise<string> => {
+    const prevIndex = currentChapter.index - 1;
+    if (prevIndex < 1) return '';
+    const allFromProject = project.novelChapters || [];
+    let prevChapter = allFromProject.find(ch => ch.index === prevIndex);
+    if (!prevChapter) {
+      const targetPage = Math.ceil(prevIndex / PAGE_SIZE);
+      const data = await fetchChaptersPaginated(project.id, targetPage, PAGE_SIZE);
+      const serverIds = new Set(data.chapters.map((c: NovelChapter) => c.id));
+      const localOnly = allFromProject.filter(ch => !serverIds.has(ch.id));
+      const merged = [...data.chapters, ...localOnly].sort((a, b) => a.index - b.index);
+      prevChapter = merged.find(ch => ch.index === prevIndex);
+    }
+    if (!prevChapter) return '';
+    if (contentCache.has(prevChapter.id)) return contentCache.get(prevChapter.id)!;
+    if (prevChapter.content) return prevChapter.content;
+    const ch = await fetchChapterContent(project.id, prevChapter.id);
+    return ch.content || '';
+  }, [project.id, project.novelChapters, contentCache]);
+
+  /** 打开 AI 生成弹窗 */
+  const openAiModal = (chapter: NovelChapter, useRefPrev: boolean) => {
+    setAiModalChapter(chapter);
+    setAiModalUseRefPrev(useRefPrev);
+    setAiModalPlotPrompt('');
+    setAiModalLength('single');
+    setAiModalTone('default');
+    setAiModalGenre(novelGenre === 'custom' ? 'custom' : novelGenre);
+    setAiModalCustomGenre(novelGenre === 'custom' ? customGenreInput : '');
+    setAiModalOpen(true);
+  };
+
+  /** 确认 AI 生成 */
+  const handleAiModalConfirm = async () => {
+    if (!aiModalChapter) return;
+    const chapter = aiModalChapter;
+    const useRefPrev = aiModalUseRefPrev;
+    setAiModalOpen(false);
+    setAiModalChapter(null);
+
+    setGeneratingChapterId(chapter.id);
+    setUploadError(null);
+    setEditingContent('');
+    try {
+      let prevContent = '';
+      if (useRefPrev) {
+        prevContent = await getPrevChapterContent(chapter);
+      }
+      const genre = (aiModalGenre === 'custom' ? aiModalCustomGenre : aiModalGenre) || (novelGenre === 'custom' ? customGenreInput : novelGenre) || '都市';
+      const result = await generateNovelChapter(
+        chapter.index,
+        chapter.title,
+        genre,
+        novelSynopsis || '',
+        title || '未命名项目',
+        aiModalPlotPrompt || '',
+        aiModalLength || 'single',
+        aiModalTone || 'default',
+        useRefPrev,
+        prevContent,
+        language || '中文',
+        model,
+        (delta) => setEditingContent(prev => prev + delta),
+      );
+      setEditingContent(result);
+      setContentCache(prev => new Map(prev).set(chapter.id, result));
+    } catch (err: any) {
+      setUploadError(err?.message || 'AI 生成失败');
+    } finally {
+      setGeneratingChapterId(null);
+    }
   };
 
   const handlePageChange = (newPage: number) => {
@@ -320,7 +442,7 @@ const NovelManager: React.FC<Props> = ({
               onChange={(e) => onNovelSynopsisChange(e.target.value)}
               className={`${STYLES.input} resize-none`}
               rows={4}
-              placeholder="输入小说的故事梗概或简介..."
+              placeholder="输入小说的故事梗概或简介，整个项目将基于此展开..."
             />
           </div>
 
@@ -350,7 +472,7 @@ const NovelManager: React.FC<Props> = ({
                 小说章节
               </h3>
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                上传小说文件，系统自动解析章节结构
+                上传小说文件或新建章节，系统自动解析/递增章节序号
               </p>
             </div>
             {totalChapters > 0 && (
@@ -382,6 +504,15 @@ const NovelManager: React.FC<Props> = ({
               )}
               {isUploading ? '解析中...' : '上传小说文件'}
             </button>
+            <button
+              onClick={handleAddChapter}
+              className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-lg transition-all
+                bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-primary)]
+                hover:bg-[var(--bg-hover)] hover:border-[var(--accent)]"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新建章节
+            </button>
 
             {totalChapters > 0 && (
               <button
@@ -397,7 +528,7 @@ const NovelManager: React.FC<Props> = ({
           </div>
 
           <p className="text-[10px] text-[var(--text-muted)] mt-2">
-            支持 .txt 格式（UTF-8 编码），最大 10MB。需包含"第X章"格式的章节标题。
+            上传：支持 .txt 格式（UTF-8 编码），最大 10MB，需包含"第X章"格式。新建：点击「新建章节」可手动编写，章节序号自动递增。
           </p>
 
           {uploadError && (
@@ -507,21 +638,56 @@ const NovelManager: React.FC<Props> = ({
                                 <textarea
                                   value={editingContent}
                                   onChange={(e) => setEditingContent(e.target.value)}
-                                  className="w-full h-64 p-3 text-xs text-[var(--text-secondary)] bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg resize-y focus:outline-none focus:border-[var(--accent)]"
+                                  disabled={!!generatingChapterId}
+                                  className="w-full h-64 p-3 text-xs text-[var(--text-secondary)] bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg resize-y focus:outline-none focus:border-[var(--accent)] disabled:opacity-80 disabled:cursor-not-allowed"
                                 />
-                                <div className="flex gap-2 mt-2">
+                                <div className="flex flex-wrap gap-2 mt-2 items-center">
                                   <button
                                     onClick={() => handleSaveEdit(chapter.id)}
-                                    className="px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
+                                    disabled={!!generatingChapterId}
+                                    className="px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
                                   >
                                     保存
                                   </button>
                                   <button
                                     onClick={handleCancelEdit}
-                                    className="px-3 py-1.5 text-[10px] font-medium rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                                    disabled={!!generatingChapterId}
+                                    className="px-3 py-1.5 text-[10px] font-medium rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
                                   >
                                     取消
                                   </button>
+                                  <span className="text-[10px] text-[var(--text-muted)] mx-1">|</span>
+                                  {generatingChapterId === chapter.id ? (
+                                    <span className="flex items-center gap-1.5 text-[10px] text-[var(--accent-text)]">
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      AI 生成中...
+                                    </span>
+                                  ) : chapter.index > 1 ? (
+                                    <>
+                                      <button
+                                        onClick={() => openAiModal(chapter, true)}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent)] transition-colors"
+                                      >
+                                        <Sparkles className="w-3 h-3" />
+                                        AI生成（参考上一章）
+                                      </button>
+                                      <button
+                                        onClick={() => openAiModal(chapter, false)}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent)] transition-colors"
+                                      >
+                                        <Sparkles className="w-3 h-3" />
+                                        AI生成（独立创作）
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      onClick={() => openAiModal(chapter, false)}
+                                      className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium rounded-md bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent)] transition-colors"
+                                    >
+                                      <Sparkles className="w-3 h-3" />
+                                      AI生成
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             ) : cachedContent ? (
@@ -607,6 +773,116 @@ const NovelManager: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* AI 生成弹窗 */}
+      {aiModalOpen && aiModalChapter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setAiModalOpen(false)}>
+          <div
+            className="w-full max-w-md bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl shadow-xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+                AI 生成第{aiModalChapter.index}章
+              </h3>
+              <button onClick={() => setAiModalOpen(false)} className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className={STYLES.label}>剧情提示词</label>
+              <textarea
+                value={aiModalPlotPrompt}
+                onChange={(e) => setAiModalPlotPrompt(e.target.value)}
+                className={`${STYLES.input} resize-none`}
+                rows={3}
+                placeholder="描述本章希望发生的情节、人物动向、情感转折等..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className={STYLES.label}>小说类型</label>
+              <div className="relative">
+                <select
+                  value={NOVEL_GENRE_OPTIONS.some(o => o.value === aiModalGenre) ? aiModalGenre : 'custom'}
+                  onChange={(e) => setAiModalGenre(e.target.value)}
+                  className={STYLES.select}
+                >
+                  {NOVEL_GENRE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-3 pointer-events-none">
+                  <ChevronRight className="w-4 h-4 text-[var(--text-muted)] rotate-90" />
+                </div>
+              </div>
+              {aiModalGenre === 'custom' && (
+                <input
+                  type="text"
+                  value={aiModalCustomGenre}
+                  onChange={(e) => setAiModalCustomGenre(e.target.value)}
+                  className={STYLES.input}
+                  placeholder="输入自定义类型..."
+                />
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className={STYLES.label}>篇幅</label>
+                <div className="relative">
+                  <select
+                    value={aiModalLength}
+                    onChange={(e) => setAiModalLength(e.target.value)}
+                    className={STYLES.select}
+                  >
+                    {NOVEL_LENGTH_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-3 pointer-events-none">
+                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)] rotate-90" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className={STYLES.label}>情感基调</label>
+                <div className="relative">
+                  <select
+                    value={aiModalTone}
+                    onChange={(e) => setAiModalTone(e.target.value)}
+                    className={STYLES.select}
+                  >
+                    {NOVEL_TONE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-3 pointer-events-none">
+                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)] rotate-90" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setAiModalOpen(false)}
+                className="flex-1 px-4 py-2.5 text-xs font-medium rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAiModalConfirm}
+                className="flex-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
+              >
+                开始生成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

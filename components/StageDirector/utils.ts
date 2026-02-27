@@ -33,8 +33,10 @@ export const getRefImagesForShot = (shot: Shot, scriptData: ProjectState['script
   }
 
   // 2. 角色参考图（外观）
-  if (shot.characters) {
-    shot.characters.forEach(charId => {
+  // 防御：shot.characters 可能来自旧数据或异常 JSON 解析，确保始终为数组
+  const shotChars = Array.isArray(shot.characters) ? shot.characters : [];
+  if (shotChars.length > 0) {
+    shotChars.forEach(charId => {
       const char = scriptData.characters.find(c => String(c.id) === String(charId));
       if (!char) return;
 
@@ -64,8 +66,9 @@ export const getRefImagesForShot = (shot: Shot, scriptData: ProjectState['script
   }
 
   // 3. 道具参考图（物品一致性）
-  if (shot.props && scriptData.props) {
-    shot.props.forEach(propId => {
+  const shotProps = Array.isArray(shot.props) ? shot.props : [];
+  if (shotProps.length > 0 && scriptData.props) {
+    shotProps.forEach(propId => {
       const prop = scriptData.props.find(p => String(p.id) === String(propId));
       const propImg = prop?.referenceImageUrl || prop?.referenceImage;
       if (propImg) {
@@ -82,9 +85,10 @@ export const getRefImagesForShot = (shot: Shot, scriptData: ProjectState['script
  * hasImage 标记该道具是否有参考图，用于提示词中区分"参考图一致性"和"文字描述约束"
  */
 export const getPropsInfoForShot = (shot: Shot, scriptData: ProjectState['scriptData']): { name: string; description: string; hasImage: boolean }[] => {
-  if (!scriptData || !shot.props || !scriptData.props) return [];
+  const shotProps = Array.isArray(shot.props) ? shot.props : [];
+  if (!scriptData || shotProps.length === 0 || !scriptData.props) return [];
   
-  return shot.props
+  return shotProps
     .map(propId => scriptData.props.find(p => String(p.id) === String(propId)))
     .filter((p): p is NonNullable<typeof p> => !!p)
     .map(p => ({ name: p.name, description: p.description || p.visualPrompt || '', hasImage: !!p.referenceImage }));
@@ -425,7 +429,7 @@ export const createSubShot = (
     dialogue: undefined, // 不继承对白 - 对白通常只在特定子镜头中出现，由AI在actionSummary中体现
     cameraMovement: subShotData.cameraMovement, // 使用AI生成的镜头运动
     shotSize: subShotData.shotSize, // 使用AI生成的景别
-    characters: [...originalShot.characters], // 继承角色列表
+    characters: [...(Array.isArray(originalShot.characters) ? originalShot.characters : [])], // 继承角色列表
     characterVariations: { ...originalShot.characterVariations }, // 继承角色变体映射
     keyframes: keyframes, // 使用AI生成的关键帧（包含visualPrompt）
     videoModel: originalShot.videoModel // 继承视频模型设置

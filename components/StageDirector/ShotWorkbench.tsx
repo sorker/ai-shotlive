@@ -86,8 +86,9 @@ const ShotWorkbench: React.FC<ShotWorkbenchProps> = ({
   onShowNineGrid
 }) => {
   const scene = scriptData?.scenes.find(s => String(s.id) === String(shot.sceneId));
-  const activeCharacters = scriptData?.characters.filter(c => shot.characters.includes(c.id)) || [];
-  const availableCharacters = scriptData?.characters.filter(c => !shot.characters.includes(c.id)) || [];
+  const shotChars = Array.isArray(shot.characters) ? shot.characters : [];
+  const activeCharacters = scriptData?.characters.filter(c => shotChars.includes(c.id)) || [];
+  const availableCharacters = scriptData?.characters.filter(c => !shotChars.includes(c.id)) || [];
   const activeProps = (scriptData?.props || []).filter(p => (shot.props || []).includes(p.id));
   const availablePropsForShot = (scriptData?.props || []).filter(p => !(shot.props || []).includes(p.id));
   

@@ -69,6 +69,7 @@ export {
 // 小说剧本生成服务
 export {
   generateNovelScript,
+  generateNovelChapter,
   createNovelEpisode,
 } from './novelScriptService';
 

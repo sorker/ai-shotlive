@@ -677,10 +677,11 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     setIsAIGenerating(true);
     
     try {
-      // 获取角色信息
+      // 获取角色信息（防御：characters 可能非数组）
       const characterNames: string[] = [];
-      if (activeShot.characters && project.scriptData?.characters) {
-        activeShot.characters.forEach(charId => {
+      const shotChars = Array.isArray(activeShot.characters) ? activeShot.characters : [];
+      if (shotChars.length > 0 && project.scriptData?.characters) {
+        shotChars.forEach(charId => {
           const char = project.scriptData?.characters.find(c => String(c.id) === String(charId));
           if (char) characterNames.push(char.name);
         });
@@ -740,10 +741,11 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     setIsAIGenerating(true);
     
     try {
-      // 获取角色信息
+      // 获取角色信息（防御：characters 可能非数组）
       const characterNames: string[] = [];
-      if (activeShot.characters && project.scriptData?.characters) {
-        activeShot.characters.forEach(charId => {
+      const shotChars = Array.isArray(activeShot.characters) ? activeShot.characters : [];
+      if (shotChars.length > 0 && project.scriptData?.characters) {
+        shotChars.forEach(charId => {
           const char = project.scriptData?.characters.find(c => String(c.id) === String(charId));
           if (char) characterNames.push(char.name);
         });
@@ -825,10 +827,11 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
       return;
     }
     
-    // 2. 获取角色名称
+    // 2. 获取角色名称（防御：characters 可能非数组）
     const characterNames: string[] = [];
-    if (shot.characters && project.scriptData?.characters) {
-      shot.characters.forEach(charId => {
+    const shotChars = Array.isArray(shot.characters) ? shot.characters : [];
+    if (shotChars.length > 0 && project.scriptData?.characters) {
+      shotChars.forEach(charId => {
         const char = project.scriptData?.characters.find(c => String(c.id) === String(charId));
         if (char) characterNames.push(char.name);
       });
@@ -891,10 +894,11 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
       return;
     }
     
-    // 2. 获取角色名称
+    // 2. 获取角色名称（防御：characters 可能非数组）
     const characterNames: string[] = [];
-    if (shot.characters && project.scriptData?.characters) {
-      shot.characters.forEach(charId => {
+    const shotChars = Array.isArray(shot.characters) ? shot.characters : [];
+    if (shotChars.length > 0 && project.scriptData?.characters) {
+      shotChars.forEach(charId => {
         const char = project.scriptData?.characters.find(c => String(c.id) === String(charId));
         if (char) characterNames.push(char.name);
       });
@@ -1239,15 +1243,17 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
             onGenerateAIAction={handleGenerateAIAction}
             onSplitShot={() => handleSplitShot(activeShot)}
             onAddCharacter={(charId) => {
-              updateShot(activeShot.id, s => ({ ...s, characters: [...s.characters, charId] }));
-              if (project.id) PS.patchShot(project.id, activeShot.id, { characters: [...activeShot.characters, charId] });
+              const sChars = Array.isArray(activeShot.characters) ? activeShot.characters : [];
+              updateShot(activeShot.id, s => ({ ...s, characters: [...(Array.isArray(s.characters) ? s.characters : []), charId] }));
+              if (project.id) PS.patchShot(project.id, activeShot.id, { characters: [...sChars, charId] });
             }}
             onRemoveCharacter={(charId) => {
-              const newChars = activeShot.characters.filter(id => id !== charId);
+              const baseChars = Array.isArray(activeShot.characters) ? activeShot.characters : [];
+              const newChars = baseChars.filter(id => id !== charId);
               const newVars = Object.fromEntries(Object.entries(activeShot.characterVariations || {}).filter(([k]) => k !== charId));
               updateShot(activeShot.id, s => ({
                 ...s,
-                characters: s.characters.filter(id => id !== charId),
+                characters: (Array.isArray(s.characters) ? s.characters : []).filter(id => id !== charId),
                 characterVariations: Object.fromEntries(Object.entries(s.characterVariations || {}).filter(([k]) => k !== charId))
               }));
               if (project.id) PS.patchShot(project.id, activeShot.id, { characters: newChars, characterVariations: newVars });

@@ -161,6 +161,8 @@ const parseScriptStructure = async (
     Tasks:
     1. Extract title, genre, logline (in ${language}).
     2. Extract characters (id, name, gender, age, personality).
+       - personality MUST include appearance prototype if the character is anthropomorphic/animal-based (e.g. 以猫为原型、拟人化狐狸形象、猫耳少女).
+       - If human, personality = traits only. If animal/anthropomorphic, personality = traits + "形象: 猫/狐/狗等" or similar.
     3. Extract scenes (id, location, time, atmosphere).
     4. Break down the story into paragraphs linked to scenes.
     
@@ -234,6 +236,7 @@ Create a comprehensive Art Direction Brief in JSON format.
 CRITICAL RULES:
 - All descriptions must be specific, concrete, and actionable for image generation AI
 - The brief must define a COHESIVE visual world
+- If characters are anthropomorphic/animal-based (猫/狐/狗/拟人等 in personality), skinTones = fur/feather color range; proportions/eyeStyle should suit animal characters
 - Output all descriptive text in ${language}
 
 Output ONLY valid JSON with this exact structure:
@@ -242,7 +245,7 @@ Output ONLY valid JSON with this exact structure:
     "primary": "primary color tone description",
     "secondary": "secondary color description",
     "accent": "accent/highlight color",
-    "skinTones": "skin tone range for characters",
+    "skinTones": "skin/fur tone range for characters",
     "saturation": "overall saturation tendency",
     "temperature": "overall color temperature"
   },
@@ -398,6 +401,8 @@ Color Palette: Primary=${artDirection.colorPalette.primary}, Secondary=${artDire
 Lighting: ${artDirection.lightingStyle}
 Texture: ${artDirection.textureStyle}`;
 
+  const anthropomorphicHint = `⚠️ If personality mentions 猫/狗/狐/拟人/动物原型/anthropomorphic - character MUST be that species. Use animal ears, fur, tail, NOT human ethnicity/skin tone.`;
+
   return `You are an expert AI prompt engineer for ${visualStyle} style image generation.
 ${artBlock}
 Create a detailed visual prompt for a character:
@@ -408,16 +413,12 @@ Character Data:
 - Age: ${char.age}
 - Personality: ${char.personality}
 
-REQUIRED STRUCTURE (output in ${language}):
-1. Core Identity: [ethnicity, age, gender, body type - MUST follow proportions: ${artDirection.characterDesignRules.proportions}]
-2. Facial Features: [specific features - eyes (MUST follow: ${artDirection.characterDesignRules.eyeStyle})]
-3. Hairstyle: [detailed hair description]
-4. Clothing: [outfit for ${genre} genre, colors MUST harmonize with palette]
-5. Pose & Expression: [matching personality]
-6. Technical Quality: ${stylePrompt}
+${anthropomorphicHint}
 
-CRITICAL: Sections 1-3 are FIXED features. Line style: ${artDirection.characterDesignRules.lineWeight}. Detail: ${artDirection.characterDesignRules.detailLevel}.
-Output as single paragraph, comma-separated, 60-90 words, MUST include ${visualStyle} style keywords. Output ONLY the prompt text.`;
+IF anthropomorphic (猫/狐/狗/拟人等): Structure = Species & Form [animal type, anthropomorphic body, ears, tail, fur] → Face [animal eyes, muzzle] → Fur/Hair → Clothing → Pose → Technical.
+IF human: Structure = Core Identity [ethnicity, age, gender, body - proportions: ${artDirection.characterDesignRules.proportions}] → Facial Features [eyes: ${artDirection.characterDesignRules.eyeStyle}] → Hairstyle → Clothing [${genre} palette] → Pose → Technical.
+
+Output in ${language}, single paragraph, comma-separated, 60-90 words. Line style: ${artDirection.characterDesignRules.lineWeight}. Detail: ${artDirection.characterDesignRules.detailLevel}. MUST include ${visualStyle} keywords. Output ONLY the prompt text.`;
 };
 
 // ============================================
@@ -669,6 +670,7 @@ export const parseScriptFull = async (
       try {
         const p = `You are an expert AI prompt engineer for ${visualStyle} style image generation.
 Create a visual prompt for: Name=${characters[i].name}, Gender=${characters[i].gender}, Age=${characters[i].age}, Personality=${characters[i].personality}.
+⚠️ If personality mentions 猫/狗/狐/拟人/动物原型 - character MUST be that species (anthropomorphic: animal ears, fur, tail). NOT human.
 Style: ${stylePrompt}. Output in ${language}. Single paragraph, 60-90 words. Include ${visualStyle} style keywords. Output ONLY the prompt.`;
         const result = await chatCall(config, p, 0.5, 1024);
         characters[i].visualPrompt = result.trim();
