@@ -428,6 +428,47 @@ const executeVideoTask = async (
   const actualModelName = model.apiModel || model.id || modelId;
   const providerBaseUrl = provider?.baseUrl || '';
 
+  // ========================================
+  // 归一化参考图：将磁盘文件路径 / 内部 API URL 转为 base64 data URL
+  // 避免将 "data/..." 这样的相对文件路径误当成 base64 直接传给第三方视频 API
+  // ========================================
+  const normalizeVideoImage = (img?: string): string | undefined => {
+    if (!img) return undefined;
+
+    // 已经是 data URL 或 HTTP URL → 直接使用
+    if (img.startsWith('data:') || /^https?:\/\//i.test(img)) {
+      return img;
+    }
+
+    // 内部 data/ 相对文件路径 → 读文件转 base64
+    if (isFilePath(img)) {
+      const fileData = readFileAsBuffer(img);
+      if (fileData) {
+        return `data:${fileData.mime};base64,${fileData.buffer.toString('base64')}`;
+      }
+      console.warn(`  ⚠️ [TaskRunner] 无法从文件读取参考图: ${img}`);
+      return undefined;
+    }
+
+    // 内部 API URL (/api/projects/:id/image/...) → 通过文件系统转 base64
+    if (img.startsWith('/api/')) {
+      const [cleanPath, queryStr] = img.split('?');
+      const srcEpisode = new URLSearchParams(queryStr || '').get('episode') || '_default';
+      const fromFile = resolveApiUrlToBase64(cleanPath, srcEpisode);
+      if (fromFile) {
+        return fromFile;
+      }
+      console.warn(`  ⚠️ [TaskRunner] 无法解析内部 API 参考图: ${img}`);
+      return undefined;
+    }
+
+    // 其他格式保持原样（由下游适配器自行处理 / 报错）
+    return img;
+  };
+
+  const normStartImage = normalizeVideoImage(startImage);
+  const normEndImage = normalizeVideoImage(endImage);
+
   // DashScope (阿里百炼 万象)
   if (
     model.providerId === 'qwen' ||
@@ -435,8 +476,13 @@ const executeVideoTask = async (
   ) {
     console.log(`  🔄 [TaskRunner] 使用 DashScope 适配器`);
     const { taskId: providerTaskId } = await createDashScopeVideoTask({
-      apiKey, modelId: actualModelName, prompt,
-      startImage, endImage, aspectRatio, duration,
+      apiKey,
+      modelId: actualModelName,
+      prompt,
+      startImage: normStartImage,
+      endImage: normEndImage,
+      aspectRatio,
+      duration,
     });
     await updateProviderTaskId(pool, taskId, providerTaskId, 'dashscope');
     await updateTaskStatus(pool, taskId, 'polling');
@@ -454,8 +500,13 @@ const executeVideoTask = async (
   ) {
     console.log(`  🔄 [TaskRunner] 使用 Seedance 适配器`);
     const { taskId: providerTaskId } = await createSeedanceVideoTask({
-      apiKey, modelId: actualModelName, prompt,
-      startImage, endImage, aspectRatio, duration,
+      apiKey,
+      modelId: actualModelName,
+      prompt,
+      startImage: normStartImage,
+      endImage: normEndImage,
+      aspectRatio,
+      duration,
     });
     await updateProviderTaskId(pool, taskId, providerTaskId, 'seedance');
     await updateTaskStatus(pool, taskId, 'polling');
@@ -475,8 +526,14 @@ const executeVideoTask = async (
   if (isAsync) {
     console.log(`  🔄 [TaskRunner] 使用通用异步模式`);
     const { taskId: providerTaskId } = await createGenericAsyncVideoTask({
-      apiBase, apiKey, modelName: actualModelName, prompt,
-      startImage, endImage, aspectRatio, duration,
+      apiBase,
+      apiKey,
+      modelName: actualModelName,
+      prompt,
+      startImage: normStartImage,
+      endImage: normEndImage,
+      aspectRatio,
+      duration,
     });
     await updateProviderTaskId(pool, taskId, providerTaskId, 'generic-async');
     await updateTaskStatus(pool, taskId, 'polling');
