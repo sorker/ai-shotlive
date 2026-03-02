@@ -778,17 +778,12 @@ export const generateNineGridPanels = async (
 };
 
 /**
- * 使用图像模型生成九宫格分镜图片
+ * 构建九宫格分镜图片的提示词（纯函数，不调用 API）
  */
-export const generateNineGridImage = async (
+export const buildNineGridImagePrompt = async (
   panels: NineGridPanel[],
-  referenceImages: string[] = [],
   visualStyle: string,
-  aspectRatio: AspectRatio = '16:9'
 ): Promise<string> => {
-  const startTime = Date.now();
-  console.log('🎬 九宫格分镜 - 开始生成九宫格图片...');
-
   await ensureStylesLoaded();
   const stylePrompt = getStylePrompt(visualStyle);
 
@@ -802,7 +797,7 @@ export const generateNineGridImage = async (
     `Panel ${idx + 1} (${positionLabels[idx]}): [${panel.shotSize} / ${panel.cameraAngle}] - ${panel.description}`
   ).join('\n');
 
-  const nineGridPrompt = `Generate a SINGLE image composed as a cinematic storyboard with a 3x3 grid layout (9 equal panels).
+  return `Generate a SINGLE image composed as a cinematic storyboard with a 3x3 grid layout (9 equal panels).
 The image shows the SAME scene from 9 DIFFERENT camera angles and shot sizes.
 Each panel is separated by thin white borders.
 
@@ -819,6 +814,21 @@ CRITICAL REQUIREMENTS:
 - Maintain consistent lighting, color palette, and atmosphere across all panels
 - Each panel should be a complete, well-composed frame suitable for use as a keyframe
 - The overall image should read as a professional cinematographer's shot planning board`;
+};
+
+/**
+ * 使用图像模型生成九宫格分镜图片
+ */
+export const generateNineGridImage = async (
+  panels: NineGridPanel[],
+  referenceImages: string[] = [],
+  visualStyle: string,
+  aspectRatio: AspectRatio = '16:9'
+): Promise<string> => {
+  const startTime = Date.now();
+  console.log('🎬 九宫格分镜 - 开始生成九宫格图片...');
+
+  const nineGridPrompt = await buildNineGridImagePrompt(panels, visualStyle);
 
   try {
     const imageUrl = await generateImage(nineGridPrompt, referenceImages, aspectRatio);

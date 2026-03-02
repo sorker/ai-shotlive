@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutGrid, Sparkles, Loader2, AlertCircle, Edit2, Film, Video as VideoIcon } from 'lucide-react';
 import { ProjectState, Shot, Keyframe, AspectRatio, VideoDuration, NineGridPanel, NineGridData } from '../../types';
-import { generateImage, generateVideo, generateActionSuggestion, optimizeKeyframePrompt, optimizeBothKeyframes, enhanceKeyframePrompt, splitShotIntoSubShots, generateNineGridPanels, generateNineGridImage } from '../../services/aiService';
+import { generateImage, generateVideo, generateActionSuggestion, optimizeKeyframePrompt, optimizeBothKeyframes, enhanceKeyframePrompt, splitShotIntoSubShots, generateNineGridPanels, generateNineGridImage, buildNineGridImagePrompt } from '../../services/aiService';
 import { generateVideoServerSide, generateImageServerSide, recoverProjectTasks, TaskStatus } from '../../services/taskService';
 import { 
   getRefImagesForShot, 
@@ -29,7 +29,7 @@ import ImagePreviewModal from './ImagePreviewModal';
 import NineGridPreview from './NineGridPreview';
 import { useAlert } from '../GlobalAlert';
 import { AspectRatioSelector } from '../AspectRatioSelector';
-import { getUserAspectRatio, setUserAspectRatio, getModelById, getActiveModel } from '../../services/modelRegistry';
+import { getUserAspectRatio, setUserAspectRatio, getModelById, getActiveModel, getActiveChatModel } from '../../services/modelRegistry';
 import * as PS from '../../services/projectPatchService';
 
 interface Props {
@@ -838,7 +838,8 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     }
     
     const visualStyle = project.visualStyle || project.scriptData?.visualStyle || 'live-action';
-    const shotGenerationModel = project.shotGenerationModel || 'gpt-5.1';
+    const activeChatModel = getActiveChatModel();
+    const shotGenerationModel = activeChatModel?.id || project.shotGenerationModel || 'gpt-5.1';
     
     // 3. 调用AI拆分
     setIsSplittingShot(true);
@@ -905,7 +906,8 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     }
     
     const visualStyle = project.visualStyle || project.scriptData?.visualStyle || 'live-action';
-    const shotGenerationModel = project.shotGenerationModel || 'gpt-5.1';
+    const activeChatModel = getActiveChatModel();
+    const shotGenerationModel = activeChatModel?.id || project.shotGenerationModel || 'gpt-5.1';
     
     // 3. 显示弹窗并设置生成状态（仅生成面板描述）
     setShowNineGrid(true);
@@ -960,7 +962,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
 
   /**
    * 九宫格分镜预览 - 第二步：确认并生成图片
-   * 用户确认/编辑完面板描述后，调用图片生成 API 生成九宫格图片
+   * 用户确认/编辑完面板描述后，通过服务端生成九宫格图片（与关键帧生成一致）
    */
   const handleConfirmNineGridPanels = async (confirmedPanels: NineGridPanel[]) => {
     if (!activeShot) return;
@@ -977,19 +979,39 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     }));
     
     try {
-      // 2. 收集参考图片
+      // 2. 构建九宫格提示词
+      const nineGridPrompt = await buildNineGridImagePrompt(confirmedPanels, visualStyle);
+      
+      // 3. 收集参考图片（角色/场景参考，与关键帧生成逻辑一致）
       const refResult = getRefImagesForShot(activeShot, project.scriptData);
       
-      // 3. 生成九宫格图片
-      const imageUrl = await generateNineGridImage(confirmedPanels, refResult.images, visualStyle, keyframeAspectRatio);
+      // 4. 通过服务端生成九宫格图片（和关键帧一样走 server-side，避免 CORS + 正确使用参考图）
+      const activeImageModel = getActiveModel('image');
+      const imageModelId = (activeImageModel as any)?.apiModel || activeImageModel?.id || 'gemini-3-pro-image-preview';
       
-      // 4. 更新状态为完成
+      const imageUrl = await generateImageServerSide(
+        project.id,
+        nineGridPrompt,
+        imageModelId,
+        {
+          referenceImages: refResult.images,
+          aspectRatio: keyframeAspectRatio,
+          hasTurnaround: refResult.hasTurnaround,
+          target: {
+            type: 'keyframe',
+            shotId: activeShot.id,
+            entityId: `ninegrid-${activeShot.id}`,
+          },
+        }
+      );
+      
+      // 5. 更新状态为完成
       updateShot(activeShot.id, (s) => ({
         ...s,
         nineGrid: {
           panels: confirmedPanels,
           imageUrl,
-          prompt: `Nine Grid Storyboard - ${activeShot.actionSummary}`,
+          prompt: nineGridPrompt,
           status: 'completed' as const
         }
       }));

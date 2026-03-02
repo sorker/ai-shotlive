@@ -82,4 +82,5 @@ export {
   enhanceKeyframePrompt,
   generateNineGridPanels,
   generateNineGridImage,
+  buildNineGridImagePrompt,
 } from './shotService';

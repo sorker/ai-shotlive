@@ -567,15 +567,46 @@ export const getApiKeyForModel = (modelId: string): string | undefined => {
 };
 
 /**
- * 获取模型对应的 API 基础 URL
+ * 获取模型对应的 API 基础 URL（已自动映射为本地代理路径，解决 CORS）
  */
 export const getApiBaseUrlForModel = (modelId: string): string => {
   const model = getModelById(modelId);
-  if (!model) return BUILTIN_PROVIDERS[0].baseUrl.replace(/\/+$/, '');
+  if (!model) return mapToProxyUrl(BUILTIN_PROVIDERS[0].baseUrl);
   
   const provider = getProviderById(model.providerId);
   const baseUrl = provider?.baseUrl || BUILTIN_PROVIDERS[0].baseUrl;
-  return baseUrl.replace(/\/+$/, '');
+  return mapToProxyUrl(baseUrl);
+};
+
+// ============================================
+// 浏览器代理 URL 映射
+// ============================================
+
+/**
+ * 已知不支持浏览器 CORS 的提供商 baseUrl → 本地代理路径映射
+ * antsk (https://api.antsk.cn) 是代理服务本身，支持 CORS，不需要映射
+ */
+const CORS_PROXY_MAP: Record<string, string> = {
+  'https://api.openai.com':                       '/api/proxy/openai',
+  'https://api.anthropic.com':                     '/api/proxy/anthropic',
+  'https://api.deepseek.com':                      '/api/proxy/deepseek',
+  'https://ark.cn-beijing.volces.com':             '/api/proxy/volcengine',
+  'https://dashscope.aliyuncs.com':                '/api/proxy/dashscope',
+  'https://open.bigmodel.cn':                      '/api/proxy/zhipu',
+  'https://generativelanguage.googleapis.com':     '/api/proxy/google',
+  'https://api.x.ai':                              '/api/proxy/xai',
+  'https://api.siliconflow.cn':                    '/api/proxy/siliconflow',
+  'https://api.moonshot.cn':                       '/api/proxy/moonshot',
+  'https://openrouter.ai/api':                     '/api/proxy/openrouter',
+};
+
+/**
+ * 将提供商原始 baseUrl 映射为本地代理路径（解决浏览器 CORS 限制）
+ * 如果 URL 不在映射表中（如自定义代理、antsk 等），原样返回
+ */
+export const mapToProxyUrl = (baseUrl: string): string => {
+  const normalized = baseUrl.replace(/\/+$/, '');
+  return CORS_PROXY_MAP[normalized] || normalized;
 };
 
 // ============================================

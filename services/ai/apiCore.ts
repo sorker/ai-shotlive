@@ -13,6 +13,7 @@ import {
   getActiveChatModel,
   getActiveVideoModel,
   getActiveImageModel,
+  mapToProxyUrl,
 } from '../modelRegistry';
 
 // ============================================
@@ -90,6 +91,22 @@ export const checkApiKey = (type: 'chat' | 'image' | 'video' = 'chat', modelId?:
   if (resolvedModel) {
     const providerApiKey = getApiKeyForModel(resolvedModel.id);
     if (providerApiKey) return providerApiKey;
+
+    // 详细调试日志：帮助定位哪个模型/提供商缺少 API Key
+    try {
+      // 为避免循环依赖，这里只做最小的信息输出
+      console.warn(
+        '[checkApiKey] API Key 缺失',
+        {
+          type,
+          requestedModelId: modelId,
+          resolvedModelId: resolvedModel.id,
+          resolvedModelProviderId: (resolvedModel as any).providerId,
+        }
+      );
+    } catch {
+      // 忽略日志过程中可能出现的异常（例如序列化失败）
+    }
   }
 
   throw new ApiKeyError("API Key 缺失，请在模型配置中为对应提供商设置 API Key。");
@@ -410,7 +427,7 @@ export const chatCompletionStream = async (
  */
 export const verifyApiKey = async (key: string, baseUrl?: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const apiBase = baseUrl?.replace(/\/+$/, '') || getApiBase('chat');
+    const apiBase = baseUrl ? mapToProxyUrl(baseUrl.replace(/\/+$/, '')) : getApiBase('chat');
     const response = await fetch(`${apiBase}/v1/chat/completions`, {
       method: 'POST',
       headers: {

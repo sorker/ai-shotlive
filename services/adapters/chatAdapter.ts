@@ -4,7 +4,7 @@
  */
 
 import { ChatModelDefinition, ChatOptions, ChatModelParams } from '../../types/model';
-import { getApiKeyForModel, getApiBaseUrlForModel, getActiveChatModel } from '../modelRegistry';
+import { getApiKeyForModel, getApiBaseUrlForModel, getActiveChatModel, mapToProxyUrl } from '../modelRegistry';
 
 /**
  * API Key 错误类
@@ -177,7 +177,7 @@ export const callChatApi = async (
  */
 export const verifyApiKey = async (apiKey: string, baseUrl?: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const url = baseUrl || 'https://api.antsk.cn';
+    const url = mapToProxyUrl((baseUrl || 'https://api.antsk.cn').replace(/\/+$/, ''));
     
     const response = await fetch(`${url}/v1/chat/completions`, {
       method: 'POST',
