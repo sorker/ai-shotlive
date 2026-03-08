@@ -18,6 +18,10 @@ dist-ssr
 # Server build output
 server/dist
 
+# Electron build output
+electron/dist
+release/
+
 # Uploads directory
 uploads/
 

@@ -22,7 +22,7 @@ import {
 const router = Router();
 router.use(authMiddleware);
 
-const DATA_ROOT = path.resolve(process.cwd(), 'data');
+const DATA_ROOT = process.env.DATA_DIR || path.resolve(process.cwd(), 'data');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -272,7 +272,9 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     );
     for (const filePath of dataFiles) {
       const content = await zip.files[filePath].async('nodebuffer');
-      const absPath = path.resolve(process.cwd(), filePath);
+      // filePath = "data/proj_xxx/..." → 去掉 "data/" 前缀后拼接到 DATA_ROOT
+      const relativePath = filePath.replace(/^data\//, '');
+      const absPath = path.join(DATA_ROOT, relativePath);
       const dir = path.dirname(absPath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });

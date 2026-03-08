@@ -18,7 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const DATA_ROOT = path.resolve(process.cwd(), 'data');
+const DATA_ROOT = process.env.DATA_DIR || path.resolve(process.cwd(), 'data');
 
 /**
  * MIME → 文件扩展名映射
@@ -196,7 +196,9 @@ export function resolveToFilePath(
  * 读取文件并返回 Buffer + MIME 类型
  */
 export function readFileAsBuffer(filePath: string): { buffer: Buffer; mime: string } | null {
-  const absPath = path.resolve(process.cwd(), filePath);
+  // filePath 格式: "data/{projectId}/..." — 去掉 data/ 前缀后拼接 DATA_ROOT
+  const relative = filePath.replace(/^data[\\/]/, '');
+  const absPath = path.resolve(DATA_ROOT, relative);
   if (!fs.existsSync(absPath)) return null;
 
   const ext = path.extname(absPath).toLowerCase();

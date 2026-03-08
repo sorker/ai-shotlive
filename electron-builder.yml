@@ -1,0 +1,85 @@
+appId: com.aishotlive.desktop
+productName: AI-ShotLive
+copyright: Copyright © 2024-2026
+
+directories:
+  output: release
+  buildResources: electron/icons
+
+# 打包进 app.asar 的文件
+files:
+  - dist/**/*
+  - server/dist/**/*
+  - electron/dist/**/*
+  - package.json
+  # 排除开发时才需要的文件
+  - "!server/src/**"
+  - "!electron/*.ts"
+  - "!electron/tsconfig.json"
+  - "!scripts/**"
+  - "!components/**"
+  - "!contexts/**"
+  - "!services/**"
+  - "!lib/**"
+  - "!types/**"
+  - "!images/**"
+  - "!data/**"
+  - "!public/**"
+  - "!CutOS/**"
+  - "!*.ts"
+  - "!*.tsx"
+  - "!*.css"
+  - "!*.html"
+  - "!*.md"
+  - "!vite.config.ts"
+  - "!tsconfig.json"
+  - "!Dockerfile"
+  - "!docker-compose*.yaml"
+  - "!nginx*.conf"
+  - "!.env*"
+
+# native 模块（better-sqlite3）需要针对 Electron 重新编译
+npmRebuild: true
+
+# asar 打包，但 native 模块需要解包
+asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+
+# ─── macOS ───────────────────────────────────────────
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  icon: electron/icons/icon.icns
+  category: public.app-category.productivity
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
+
+dmg:
+  title: "${productName}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ─── Windows ─────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: electron/icons/icon.ico
+  artifactName: "${productName}-Setup-${version}-win.${ext}"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: electron/icons/icon.ico
+  uninstallerIcon: electron/icons/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AI-ShotLive

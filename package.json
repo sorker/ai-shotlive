@@ -1,8 +1,9 @@
 {
   "name": "ai-shotlive-director",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron/dist/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "vite",
@@ -10,7 +11,14 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p server/tsconfig.json",
+    "build:electron-main": "tsc -p electron/tsconfig.json",
     "start": "node server/dist/index.js",
+    "start:local": "DB_TYPE=sqlite NODE_ENV=production node server/dist/index.js",
+    "dev:local": "DB_TYPE=sqlite concurrently \"npm run dev:client\" \"DB_TYPE=sqlite tsx watch server/src/index.ts\"",
+    "build:local": "bash scripts/build-local.sh",
+    "build:electron": "bash scripts/build-electron.sh",
+    "build:electron:mac": "bash scripts/build-electron.sh mac",
+    "build:electron:win": "bash scripts/build-electron.sh win",
     "preview": "vite preview",
     "migrate:episode-ids": "tsx server/src/scripts/migrateEpisodeIds.ts",
     "migrate:episode-paths": "tsx server/src/scripts/migrateToEpisodePaths.ts"
@@ -26,6 +34,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "ai": "^6.0.99",
     "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
@@ -49,8 +58,10 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "@tailwindcss/vite": "^4.2.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.9",
@@ -59,6 +70,8 @@
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.1.2",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.2.1",
     "tsx": "^4.19.4",

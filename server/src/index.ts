@@ -4,13 +4,16 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import type { AddressInfo } from 'net';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 加载环境变量
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// 加载环境变量（非 Electron 模式下从项目根目录加载）
+if (!process.env.ELECTRON) {
+  dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+}
 
-import { initDatabase, getPool } from './config/database.js';
+import { initDatabase, getPool, isSqlite } from './config/database.js';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import projectPatchRoutes from './routes/projectPatch.js';
@@ -26,51 +29,51 @@ import cutosAgentRoutes from './routes/cutosAgent.js';
 import { recoverTasks } from './services/taskRunner.js';
 import { mountProxy } from './proxy.js';
 
-const app = express();
+const expressApp = express();
 const PORT = parseInt(process.env.SERVER_PORT || '3001', 10);
 
 // 确保 uploads 目录存在
-const uploadsDir = path.resolve(__dirname, '../../uploads');
+const uploadsDir = process.env.UPLOADS_DIR || path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 已创建 uploads 目录');
 }
 
 // 第三方 API 代理（放在 body 解析前，生产环境与 Vite/nginx 行为一致）
-mountProxy(app);
+mountProxy(expressApp);
 
 // 中间件
-app.use(cors());
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ extended: true, limit: '500mb' }));
+expressApp.use(cors());
+expressApp.use(express.json({ limit: '500mb' }));
+expressApp.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
 // API 路由
-app.use('/api/auth', authRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/projects', projectPatchRoutes);
-app.use('/api/assets', assetRoutes);
-app.use('/api/models', modelRoutes);
-app.use('/api/uploads', uploadRoutes);
-app.use('/api/preferences', preferencesRoutes);
-app.use('/api/tasks', taskRoutes);
-app.use('/api/visual-styles', visualStyleRoutes);
-app.use('/api/data-transfer', dataTransferRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/cutos', cutosAgentRoutes);
+expressApp.use('/api/auth', authRoutes);
+expressApp.use('/api/projects', projectRoutes);
+expressApp.use('/api/projects', projectPatchRoutes);
+expressApp.use('/api/assets', assetRoutes);
+expressApp.use('/api/models', modelRoutes);
+expressApp.use('/api/uploads', uploadRoutes);
+expressApp.use('/api/preferences', preferencesRoutes);
+expressApp.use('/api/tasks', taskRoutes);
+expressApp.use('/api/visual-styles', visualStyleRoutes);
+expressApp.use('/api/data-transfer', dataTransferRoutes);
+expressApp.use('/api/ai', aiRoutes);
+expressApp.use('/api/cutos', cutosAgentRoutes);
 
 // 健康检查
-app.get('/api/health', (_req, res) => {
+expressApp.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
 // 生产环境：提供静态文件
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.resolve(__dirname, '../../dist');
+  const distPath = process.env.DIST_PATH || path.resolve(__dirname, '../../dist');
   if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
+    expressApp.use(express.static(distPath));
 
     // SPA 回退 - 所有非 API 路由返回 index.html
-    app.get('*', (req, res) => {
+    expressApp.get('*', (req, res) => {
       if (!req.path.startsWith('/api')) {
         res.sendFile(path.join(distPath, 'index.html'));
       }
@@ -78,14 +81,28 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-// 初始化数据库并启动服务器
-const start = async () => {
-  try {
-    await initDatabase();
-    app.listen(PORT, '0.0.0.0', async () => {
-      console.log(`🚀 AiShotlive API Server 运行在 http://0.0.0.0:${PORT}`);
+/**
+ * 启动服务器并返回实际监听的端口号。
+ * @param preferPort 期望端口，传 0 使用随机可用端口（Electron 模式推荐）
+ */
+export async function startServer(preferPort?: number): Promise<number> {
+  await initDatabase();
+
+  const listenPort = preferPort ?? PORT;
+  const host = process.env.ELECTRON ? '127.0.0.1' : '0.0.0.0';
+
+  return new Promise((resolve, reject) => {
+    const server = expressApp.listen(listenPort, host, async () => {
+      const addr = server.address() as AddressInfo;
+      const actualPort = addr.port;
+
+      console.log(`🚀 AiShotlive API Server 运行在 http://${host}:${actualPort}`);
       console.log(`📦 环境: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🗄️  数据库: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+      if (isSqlite()) {
+        console.log(`🗄️  数据库: SQLite (${process.env.SQLITE_DB_PATH || 'data/local.db'})`);
+      } else {
+        console.log(`🗄️  数据库: MySQL ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+      }
 
       // 恢复未完成的后台任务
       try {
@@ -93,11 +110,18 @@ const start = async () => {
       } catch (err) {
         console.error('⚠️ 任务恢复失败:', err);
       }
+
+      resolve(actualPort);
     });
-  } catch (err) {
+
+    server.on('error', reject);
+  });
+}
+
+// 非 Electron 环境直接启动
+if (!process.env.ELECTRON) {
+  startServer().catch((err) => {
     console.error('❌ 服务器启动失败:', err);
     process.exit(1);
-  }
-};
-
-start();
+  });
+}

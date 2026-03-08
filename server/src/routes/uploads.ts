@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_ROOT = path.resolve(__dirname, '../../../uploads');
+const UPLOADS_ROOT = process.env.UPLOADS_DIR || path.resolve(__dirname, '../../../uploads');
 
 const router = Router();
 

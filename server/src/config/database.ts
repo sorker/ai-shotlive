@@ -3,9 +3,12 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { RowDataPacket } from 'mysql2';
+import { createSqlitePool, initDatabaseSqlite } from './sqliteDatabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+
+const DB_TYPE = (process.env.DB_TYPE || 'mysql').toLowerCase();
 
 // 单行数据最大 64MB（单张图片或视频），远小于之前需要的 256MB
 const TARGET_MAX_PACKET = 64 * 1024 * 1024;
@@ -26,9 +29,12 @@ const poolConfig: mysql.PoolOptions = {
   idleTimeout: 60000,
 };
 
-let pool = mysql.createPool(poolConfig);
+let pool: mysql.Pool = DB_TYPE === 'sqlite'
+  ? createSqlitePool() as unknown as mysql.Pool
+  : mysql.createPool(poolConfig);
 
 export const getPool = (): mysql.Pool => pool;
+export const isSqlite = (): boolean => DB_TYPE === 'sqlite';
 
 /**
  * 调整 MySQL max_allowed_packet
@@ -236,6 +242,11 @@ const migrateEpisodeIdIntoPrimaryKeys = async (conn: mysql.PoolConnection): Prom
  * 初始化数据库 - 创建规范化表结构
  */
 export const initDatabase = async (): Promise<void> => {
+  if (DB_TYPE === 'sqlite') {
+    await initDatabaseSqlite();
+    return;
+  }
+
   await adjustMaxAllowedPacket();
 
   const conn = await pool.getConnection();
