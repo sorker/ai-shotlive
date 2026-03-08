@@ -86,12 +86,15 @@ Traditional Text-to-Video models often struggle with specific camera movements a
 
 ## Tech Stack
 
-*   **Frontend**: React 19, Vite, Tailwind CSS
-*   **Backend**: Express.js, MySQL, JWT authentication
-*   **AI**: Multi-provider text/image/video API with unified adapter layer (see `services/adapters`, `types/model.ts`)
-*   **Storage**: MySQL for projects, assets, model configs and user preferences; user data isolated by `user_id`
-*   **Files**: Novel uploads in `uploads/`, media files (images/videos) in `data/`, isolated by user/project
-*   **Backup**: ZIP archive export/import (database + media files); import auto-creates a new user
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 19, Vite 6, Tailwind CSS 4, Radix UI, Framer Motion |
+| **Backend** | Express.js, MySQL 8 / SQLite (local mode), JWT authentication |
+| **AI** | Multi-provider text/image/video/audio API with unified adapter layer (see `services/adapters`, `types/model.ts`); CutOS AI Agent (`@ai-sdk/openai`, `ai`) |
+| **Storage** | MySQL / SQLite for projects, assets, model configs, and user preferences; user data isolated by `user_id` |
+| **Desktop** | Electron 33, better-sqlite3, electron-builder (macOS .dmg / Windows .exe) |
+| **Files** | Novel uploads in `uploads/`, media files (images/videos) in `data/`, isolated by user/project |
+| **Backup** | ZIP archive export/import (database + media files); import auto-creates a new user |
 
 ## Why Choose AntSK API?
 
@@ -153,87 +156,167 @@ For **quick one-off creative tasks**, try our online tool platform:
 
 Download the installer and get started right away — no development environment needed:
 
-**[📥 Download AI shotlive Director Client (Windows)](https://tree456.oss-cn-beijing.aliyuncs.com/AiShotlive%20AI%20Director%20Setup%201.0.0.exe?Expires=1770908400&OSSAccessKeyId=TMP.3KofXPaUNdnvbUpRP5MqiRmMMxuGwiftTgQfn7U3ntRtFvMYHpMB2kPb17r7rPXksvo7DFncrz4dWSfs3K33wVgGXfnCy4&Signature=wiOZbN%2BcZNuyZdiEI3KR1CqkFhM%3D)**
+- **macOS (Apple Silicon)**: [Download .dmg](https://github.com/sorker/ai-shotlive/releases)
+- **macOS (Intel)**: [Download .dmg](https://github.com/sorker/ai-shotlive/releases)
+- **Windows**: [Download .exe](https://github.com/sorker/ai-shotlive/releases)
 
-> 💡 Just download and install — supports Windows.
+> See [Releases](https://github.com/sorker/ai-shotlive/releases) for all available versions.
+
+---
+
+## Requirements
+
+- **Node.js** >= 20
+- **MySQL** >= 5.7 (8.0+ recommended) — for web deployment
+- **SQLite** (built-in) — for local/desktop mode, no extra installation needed
+- **npm** >= 9
 
 ---
 
 ## Getting Started
 
-### Option 1: Local Development
+### 1. Environment Setup
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/shuyu-labs/ai-shotlive-Director.git
 cd ai-shotlive-Director
 
-# 2. Install dependencies
 npm install
+cp .env.example .env
+```
 
-# 3. Start development server
+Edit `.env` with your database and JWT configuration:
+
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=banana
+DB_PASSWORD=banana
+DB_NAME=banana
+
+JWT_SECRET=aishotlive_jwt_secret_change_me_in_production
+SERVER_PORT=3001
+NODE_ENV=development
+```
+
+### 2. Database Initialization
+
+The server auto-creates tables on first startup. Optionally seed a default admin user:
+
+```bash
+# Default account: admin / admin123
+npx tsx server/src/scripts/seed.ts
+
+# Import a project backup
+npx tsx server/src/scripts/seed.ts ./your-backup.json
+```
+
+### 3. Deployment Options
+
+**Local Development (Frontend + Backend):**
+
+```bash
 npm run dev
-
-# 4. Open in browser
-# Visit http://localhost:3000
+# Frontend: http://localhost:3000  Backend API: http://localhost:3001
 ```
 
-### Option 2: Docker Deployment (Recommended)
+**Docker Deployment (with host MySQL):**
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/shuyu-labs/ai-shotlive-Director.git
-cd ai-shotlive-Director
-
-# 2. Build and start with Docker Compose
 docker-compose up -d --build
-
-# 3. Open in browser
-# Visit http://localhost:3005
-
-# View logs
-docker-compose logs -f
-
-# Stop container
-docker-compose down
+# Visit: http://localhost:3001
 ```
 
-### Option 3: Using Docker Commands
+**Docker Deployment (App + MySQL stack, no external DB):**
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/shuyu-labs/ai-shotlive-Director.git
-cd ai-shotlive-Director
-
-# 2. Build image
-docker build -t ai-shotlive .
-
-# 3. Run container
-docker run -d -p 3005:80 --name ai-shotlive-app ai-shotlive
-
-# 4. Open in browser
-# Visit http://localhost:3005
-
-# View logs
-docker logs -f ai-shotlive-app
-
-# Stop container
-docker stop ai-shotlive-app
+docker compose -f docker-compose.mysql.yaml up -d --build
+# Visit: http://localhost:3001
 ```
 
-### Other Commands
+**Local Lightweight (SQLite, no MySQL required):**
 
 ```bash
-# Build for production
+npm run build:local
+npm run start:local
+# Visit: http://localhost:3001
+# Data stored in data/local.db
+```
+
+**Production Build:**
+
+```bash
 npm run build
-
-# Preview production build
-npm run preview
-
-# Force rebuild Docker image without cache
-docker-compose build --no-cache
-docker-compose up -d --force-recreate
+NODE_ENV=production npm start
 ```
+
+**Other Commands:** `npm run build:client` / `npm run build:server` / `npm run preview`; Docker no-cache rebuild: `docker compose build --no-cache && docker compose up -d --force-recreate`.
+
+---
+
+## Desktop Client Packaging (Electron)
+
+The desktop client is packaged with Electron and includes an embedded SQLite database. It works out of the box — no MySQL or server setup required.
+
+### Requirements
+
+- **Node.js** >= 18
+- **Xcode Command Line Tools** (macOS, for native module compilation): `xcode-select --install`
+- **Visual Studio Build Tools** (Windows, for native module compilation)
+
+### Build Commands
+
+```bash
+# Install dependencies (first time or after changes)
+npm install --legacy-peer-deps
+
+# Build + package for current platform
+npm run build:electron
+
+# Package for macOS only (.dmg)
+npm run build:electron:mac
+
+# Package for Windows only (.exe)
+npm run build:electron:win
+```
+
+### Build Pipeline
+
+```
+npm run build:client          # Vite compiles frontend → dist/
+npm run build:server          # tsc compiles server → server/dist/
+npm run build:electron-main   # tsc compiles Electron entry → electron/dist/
+npx electron-builder          # Package into installer → release/
+```
+
+### Output Artifacts
+
+| Platform | Artifact | Architecture |
+|----------|----------|-------------|
+| macOS | `release/AI-ShotLive-{version}-mac-arm64.dmg` | Apple Silicon (M1/M2/M3/M4) |
+| macOS | `release/AI-ShotLive-{version}-mac-x64.dmg` | Intel |
+| Windows | `release/AI-ShotLive-Setup-{version}-win.exe` | x64 |
+
+### Data Storage Location
+
+Desktop client data is stored separately from the application:
+
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/ai-shotlive-director/` |
+| Windows | `%APPDATA%/ai-shotlive-director/` |
+
+Contains: `local.db` (SQLite database), `data/` (media files), `uploads/` (uploaded files)
+
+### Customization
+
+Place a `.env` file in the data directory to override default settings (e.g., API Keys, JWT secret).
+
+### Notes
+
+- `better-sqlite3` is a native C++ module; electron-builder automatically recompiles it for the target Electron version
+- Cross-platform Windows packaging requires a Windows environment (or CI)
+- App icons are in `electron/icons/`; replace `icon.png` and follow `electron/icons/README.md` to generate `.icns` / `.ico`
 
 ---
 
@@ -247,11 +330,14 @@ docker-compose up -d --force-recreate
 
 ---
 
-## Project Origin
+## Acknowledgements
 
-This project is based on [CineGen-AI](https://github.com/Will-Water/CineGen-AI) and has been further developed with enhanced features and optimizations.
+This project builds upon the following open-source projects, with added frontend-backend separation and user services. Thanks to all original authors for their contributions:
 
-Thanks to the original author for their open-source contribution!
+- [BigBanana-AI-Director](https://github.com/shuyu-labs/BigBanana-AI-Director) — Core workflow and project architecture reference
+- [CutOS](https://github.com/shamsharoon/CutOS) — AI video editor (CutOS AI editing module)
+- [CineGen-AI](https://github.com/Will-Water/CineGen-AI) — Storyboard generation and keyframe-driven workflow
+- [Toonflow-app](https://github.com/HBAI-Ltd/Toonflow-app) — Motion comic generation workflow reference
 
 ---
 

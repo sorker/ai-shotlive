@@ -144,9 +144,10 @@
 | 层级 | 技术 |
 |------|------|
 | **前端** | React 19, Vite 6, Tailwind CSS 4, Radix UI, Framer Motion |
-| **后端** | Express.js, MySQL 8, JWT 认证 |
+| **后端** | Express.js, MySQL 8 / SQLite (本地模式), JWT 认证 |
 | **AI** | 多厂商文本/图像/视频/音频 API，适配器层统一调用（见 `services/adapters`、`types/model.ts`）；CutOS AI Agent（`@ai-sdk/openai`、`ai`） |
-| **存储** | MySQL 持久化项目、资产、模型配置、用户偏好；用户数据按 `user_id` 隔离 |
+| **存储** | MySQL / SQLite 持久化项目、资产、模型配置、用户偏好；用户数据按 `user_id` 隔离 |
+| **桌面** | Electron 33, better-sqlite3, electron-builder (macOS .dmg / Windows .exe) |
 | **文件** | 小说上传文件存于 `uploads/`，媒体文件（图片/视频）存于 `data/`，均按用户/项目隔离 |
 | **备份** | 支持 ZIP 归档导出/导入（数据库 + 媒体文件），导入时自动创建新用户 |
 
@@ -163,7 +164,8 @@
 ## 环境要求
 
 - **Node.js** >= 20
-- **MySQL** >= 5.7（推荐 8.0+）
+- **MySQL** >= 5.7（推荐 8.0+）— Web 部署模式
+- **SQLite**（内置）— 本地/桌面客户端模式，无需额外安装
 - **npm** >= 9
 
 ---
@@ -236,7 +238,82 @@ npm run build
 NODE_ENV=production npm start
 ```
 
+**本地轻量部署（SQLite，无需 MySQL）：**
+
+```bash
+npm run build:local
+npm run start:local
+# 访问: http://localhost:3001
+# 数据存储在 data/local.db
+```
+
 **其他命令：** `npm run build:client` / `npm run build:server` / `npm run preview`；Docker 无缓存重建：`docker compose build --no-cache && docker compose up -d --force-recreate`。
+
+---
+
+## 桌面客户端打包 (Electron)
+
+桌面客户端基于 Electron 打包，内嵌 SQLite 数据库，双击即用，无需安装 MySQL 或配置服务器。
+
+### 环境要求
+
+- **Node.js** >= 18
+- **Xcode Command Line Tools**（macOS 编译 native 模块）：`xcode-select --install`
+- **Visual Studio Build Tools**（Windows 编译 native 模块）
+
+### 打包命令
+
+```bash
+# 安装依赖（首次或依赖变更后）
+npm install --legacy-peer-deps
+
+# 一键编译 + 打包（当前平台）
+npm run build:electron
+
+# 仅打包 macOS (.dmg)
+npm run build:electron:mac
+
+# 仅打包 Windows (.exe)
+npm run build:electron:win
+```
+
+### 打包流程
+
+```
+npm run build:client          # Vite 编译前端 → dist/
+npm run build:server          # tsc 编译服务端 → server/dist/
+npm run build:electron-main   # tsc 编译 Electron 入口 → electron/dist/
+npx electron-builder          # 打包为安装包 → release/
+```
+
+### 产物
+
+| 平台 | 产物 | 架构 |
+|------|------|------|
+| macOS | `release/AI-ShotLive-{version}-mac-arm64.dmg` | Apple Silicon (M1/M2/M3/M4) |
+| macOS | `release/AI-ShotLive-{version}-mac-x64.dmg` | Intel |
+| Windows | `release/AI-ShotLive-Setup-{version}-win.exe` | x64 |
+
+### 数据存储位置
+
+桌面客户端的数据与应用分离，存储在用户数据目录下：
+
+| 平台 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/ai-shotlive-director/` |
+| Windows | `%APPDATA%/ai-shotlive-director/` |
+
+包含：`local.db`（SQLite 数据库）、`data/`（媒体文件）、`uploads/`（上传文件）
+
+### 配置与自定义
+
+用户可在数据目录下放置 `.env` 文件覆盖默认配置（如 API Key、JWT 密钥等）。
+
+### 注意事项
+
+- `better-sqlite3` 为 C++ 原生模块，打包时 electron-builder 会自动针对 Electron 版本重新编译
+- 跨平台打包 Windows 安装包需在 Windows 环境下执行（或使用 CI）
+- 应用图标位于 `electron/icons/`，替换 `icon.png` 后可参考 `electron/icons/README.md` 生成 `.icns` / `.ico`
 
 ---
 
@@ -246,6 +323,15 @@ NODE_ENV=production npm start
 ai-shotlive-Director/
 ├── .env / .env.example      # 环境变量
 ├── docker-compose.yaml      # Docker 编排
+├── electron-builder.yml     # Electron 打包配置
+├── electron/                # Electron 桌面客户端
+│   ├── main.ts             # 主进程（启动 Express + BrowserWindow）
+│   ├── preload.ts          # 预加载脚本
+│   ├── tsconfig.json
+│   └── icons/              # 应用图标（.png / .icns / .ico）
+├── scripts/                 # 编译脚本
+│   ├── build-local.sh      # 本地 SQLite 模式编译
+│   └── build-electron.sh   # Electron 桌面客户端编译
 ├── package.json / vite.config.ts
 ├── App.tsx, index.tsx, types.ts
 ├── types/model.ts           # 模型与提供商类型、内置模型列表
@@ -281,7 +367,7 @@ ai-shotlive-Director/
 ├── server/                  # Express 后端
 │   └── src/
 │       ├── index.ts
-│       ├── config/database.ts
+│       ├── config/database.ts, sqliteDatabase.ts
 │       ├── middleware/auth.ts
 │       ├── routes/
 │       │   ├── auth.ts      # 登录/注册/资料修改
@@ -344,9 +430,15 @@ ai-shotlive-Director/
 
 ---
 
-**Windows 客户端**（开箱即用）：[暂未打包](https://github.com/sorker/ai-shotlive/releases)
+## 客户端下载
 
-**MAC 客户端**（开箱即用）：[下载 AI shotlive Director 安装包](https://github.com/sorker/ai-shotlive/releases)
+下载安装包即可使用，无需搭建开发环境：
+
+- **macOS (Apple Silicon)**: [下载 .dmg](https://github.com/sorker/ai-shotlive/releases)
+- **macOS (Intel)**: [下载 .dmg](https://github.com/sorker/ai-shotlive/releases)
+- **Windows**: [下载 .exe](https://github.com/sorker/ai-shotlive/releases)
+
+> 查看 [Releases](https://github.com/sorker/ai-shotlive/releases) 获取所有版本。
 
 ---
 
