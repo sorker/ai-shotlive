@@ -345,9 +345,8 @@ ai-shotlive-Director/
 ---
 
 **Windows 客户端**（开箱即用）：[暂未打包](https://github.com/sorker/ai-shotlive/releases)
-**MAC 客户端**（开箱即用）：[下载 AI shotlive Director 安装包](https://github.com/sorker/ai-shotlive/releases)
 
-**轻量创作工具**：AiShotlive 创作工坊 — AI 绘图、PPT、视频、小红书文案、小说、动漫等，浏览器即用。本项目更适合**系统化短剧制作与工业化工作流**。
+**MAC 客户端**（开箱即用）：[下载 AI shotlive Director 安装包](https://github.com/sorker/ai-shotlive/releases)
 
 ---
 
