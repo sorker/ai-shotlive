@@ -236,6 +236,15 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     }
   };
 
+  const refreshLibrary = async () => {
+    try {
+      console.log('📦 [资产库] 刷新列表');
+      await fetchLibraryPage(libraryPage);
+    } catch (e) {
+      console.warn('⚠️ [资产库] 刷新失败', e);
+    }
+  };
+
   useEffect(() => {
     if (!showLibraryModal) return;
     fetchLibraryPage(libraryPage);

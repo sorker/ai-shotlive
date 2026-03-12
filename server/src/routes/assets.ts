@@ -70,10 +70,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     );
     const total = Number((countRows as any)[0]?.total ?? 0);
 
-    const [rows] = await getPool().execute<AssetRow[]>(
-      `SELECT data FROM asset_library WHERE ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset]
-    );
+    const safeLimit = Math.max(1, Math.min(pageSize, MAX_PAGE_SIZE));
+    const safeOffset = Math.max(0, offset);
+    const sql = `SELECT data FROM asset_library WHERE ${where} ORDER BY updated_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+    const [rows] = await getPool().execute<AssetRow[]>(sql, params);
     const items = rows.map(r => JSON.parse(r.data));
 
     let projectOptions: { id: string; name: string }[] = [];
