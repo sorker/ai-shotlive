@@ -12,10 +12,11 @@ export default defineConfig(({ mode }) => {
       plugins: [
         react(),
         tailwindcss(),
-        // Sentry 插件 - 生产环境上传 Source Map
+        // Sentry 插件 - 生产环境上传 Source Map (支持本地部署)
         isProd && env.SENTRY_AUTH_TOKEN && sentryVitePlugin({
-          org: 'your-org', // 替换为你的 Sentry 组织
-          project: 'ai-shotlive', // 替换为你的项目名称
+          url: env.SENTRY_URL || 'http://localhost:9000', // 本地 Sentry 地址
+          org: env.SENTRY_ORG || 'ai-shotlive',
+          project: env.SENTRY_PROJECT || 'ai-shotlive',
           authToken: env.SENTRY_AUTH_TOKEN,
         }),
       ].filter(Boolean),
