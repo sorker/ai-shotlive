@@ -2,11 +2,27 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import sentryVitePlugin from '@sentry/vite-plugin';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const isProd = mode === 'production';
+
     return {
-      plugins: [react(), tailwindcss()],
+      plugins: [
+        react(),
+        tailwindcss(),
+        // Sentry 插件 - 生产环境上传 Source Map
+        isProd && env.SENTRY_AUTH_TOKEN && sentryVitePlugin({
+          url: 'https://sentry.io/',
+          org: 'your-org', // 替换为你的 Sentry 组织
+          project: 'ai-shotlive', // 替换为你的项目名称
+          authToken: env.SENTRY_AUTH_TOKEN,
+          release: {
+            name: env.npm_package_version || '0.0.1',
+          },
+        }),
+      ].filter(Boolean),
       server: {
         port: 3000,
         host: '0.0.0.0',

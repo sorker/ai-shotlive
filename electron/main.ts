@@ -8,6 +8,27 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import * as Sentry from '@sentry/electron/main';
+
+// 初始化 Sentry（必须在最前面）
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.SENTRY_ENVIRONMENT || 'production',
+  release: process.env.npm_package_version || app.getVersion(),
+
+  // 性能监控
+  tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+
+  // Electron 特有集成
+  integrations: [
+    Sentry.electronMainIntegration(),
+  ],
+
+  // 监控主进程崩溃
+  onUncaughtException: (err) => {
+    console.error('主进程未捕获异常:', err);
+  },
+});
 
 // ─── 环境变量（必须在导入 server 前设置） ────────────────────────
 

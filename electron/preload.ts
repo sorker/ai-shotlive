@@ -6,6 +6,15 @@
  */
 
 import { contextBridge } from 'electron';
+import * as Sentry from '@sentry/electron/preload';
+
+// 初始化 Sentry（渲染进程错误监控）
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.SENTRY_ENVIRONMENT || 'production',
+  release: process.env.npm_package_version || '0.0.1',
+  tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+});
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
