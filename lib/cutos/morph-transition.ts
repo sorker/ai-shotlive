@@ -134,7 +134,7 @@ export async function createMorphTransition(
       startImage: startBase64,
       endImage: endBase64,
       aspectRatio: "16:9",
-      duration: 5,
+      duration: 4,
     },
     morphModel
   );

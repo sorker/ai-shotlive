@@ -21,13 +21,8 @@ Sentry.init({
 
   // Electron 特有集成
   integrations: [
-    Sentry.electronMainIntegration(),
+    Sentry.electronNetIntegration(),
   ],
-
-  // 监控主进程崩溃
-  onUncaughtException: (err) => {
-    console.error('主进程未捕获异常:', err);
-  },
 });
 
 // ─── 环境变量（必须在导入 server 前设置） ────────────────────────

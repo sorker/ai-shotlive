@@ -52,12 +52,12 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const callbacksRef = useRef<{ onConfirm?: () => void; onCancel?: () => void }>({});
-  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearAutoDismissTimer = useCallback(() => {
     if (autoDismissTimerRef.current) {
       clearTimeout(autoDismissTimerRef.current);
-      autoDismissTimerRef.current = undefined;
+      autoDismissTimerRef.current = null;
     }
   }, []);
 

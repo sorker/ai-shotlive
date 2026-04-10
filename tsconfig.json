@@ -11,7 +11,8 @@
     ],
     "skipLibCheck": true,
     "types": [
-      "node"
+      "node",
+      "./vite-env"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -25,5 +26,9 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    ".",
+    "vite-env.d.ts"
+  ]
 }

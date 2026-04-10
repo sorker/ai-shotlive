@@ -14,7 +14,7 @@ interface OnboardingProps {
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onQuickStart }) => {
-  const [currentPage, setCurrentPage] = useState(ONBOARDING_PAGES.WELCOME);
+  const [currentPage, setCurrentPage] = useState<number>(0);
   const [isAnimating, setIsAnimating] = useState(false);
 
   // 处理页面切换动画

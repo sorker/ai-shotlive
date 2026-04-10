@@ -6,7 +6,6 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import type { AddressInfo } from 'net';
 import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,19 +23,9 @@ Sentry.init({
   // 性能监控
   tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
 
-  // 性能分析
-  profilesSampleRate: parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || '0.1'),
-
   // 集成
   integrations: [
-    nodeProfilingIntegration(),
-    Sentry.httpIntegration({ requestHook: (event) => {
-      // 过滤健康检查请求
-      if (event.request?.url?.includes('/api/health')) {
-        return null;
-      }
-      return event;
-    }}),
+    Sentry.httpIntegration(),
     Sentry.expressIntegration(),
   ],
 });
@@ -75,9 +64,6 @@ expressApp.use(cors());
 expressApp.use(express.json({ limit: '500mb' }));
 expressApp.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
-// Sentry 请求处理（必须在路由之前）
-expressApp.use(Sentry.requestHandler());
-
 // API 路由
 expressApp.use('/api/auth', authRoutes);
 expressApp.use('/api/projects', projectRoutes);
@@ -96,9 +82,6 @@ expressApp.use('/api/cutos', cutosAgentRoutes);
 expressApp.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
-
-// Sentry 错误处理中间件（必须在所有路由之后）
-expressApp.use(Sentry.errorHandler());
 
 // 生产环境：提供静态文件
 if (process.env.NODE_ENV === 'production') {

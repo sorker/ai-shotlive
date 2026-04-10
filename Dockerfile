@@ -35,14 +35,15 @@ COPY --from=builder /app/dist ./dist
 # 从构建阶段复制后端构建产物
 COPY --from=builder /app/server/dist ./server/dist
 
-# 复制 nginx 配置（用于参考，实际使用 Express 提供服务）
-COPY nginx.conf ./nginx.conf
-
-# 创建 uploads 目录
-RUN mkdir -p /app/uploads
+# 创建 uploads 和 data 目录
+RUN mkdir -p /app/uploads /app/data
 
 # 暴露端口
 EXPOSE 3001
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 # 启动 Express 服务器
 CMD ["node", "server/dist/index.js"]

@@ -167,6 +167,9 @@
 - **MySQL** >= 5.7（推荐 8.0+）— Web 部署模式
 - **SQLite**（内置）— 本地/桌面客户端模式，无需额外安装
 - **npm** >= 9
+- **Sentry**（可选）— 错误监控，访问 [sentry.io](https://sentry.io) 创建项目
+
+**详细部署指南请参考 [DEPLOY.md](./DEPLOY.md)**
 
 ---
 
