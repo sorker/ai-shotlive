@@ -14,9 +14,9 @@ export default defineConfig(({ mode }) => {
         tailwindcss(),
         // Sentry 插件 - 生产环境上传 Source Map (支持本地部署)
         isProd && env.SENTRY_AUTH_TOKEN && sentryVitePlugin({
-          url: env.SENTRY_URL || 'http://localhost:9000', // 本地 Sentry 地址
-          org: env.SENTRY_ORG || 'ai-shotlive',
-          project: env.SENTRY_PROJECT || 'ai-shotlive',
+          url: env.SENTRY_URL || 'http://192.168.11.138:9000',
+          org: env.SENTRY_ORG || 'sentry',
+          project: env.SENTRY_PROJECT || '4',
           authToken: env.SENTRY_AUTH_TOKEN,
         }),
       ].filter(Boolean),
