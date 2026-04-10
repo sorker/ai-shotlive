@@ -15,16 +15,22 @@ const getEnv = (key: string, defaultValue?: string) => {
   return import.meta.env?.[key] ?? defaultValue;
 };
 
-// 初始化 Sentry
+// 初始化 Sentry - 本地部署
 Sentry.init({
-  dsn: getEnv('VITE_SENTRY_DSN', 'https://your-sentry-dsn@o0.ingest.sentry.io/0'),
-  environment: getEnv('VITE_SENTRY_ENVIRONMENT', 'development'),
+  // DSN 配置
+  dsn: getEnv('VITE_SENTRY_DSN', 'http://0a2273dee595cb24b2de6cd1c8c9f445@192.168.11.138:9000/4'),
+  
+  // 环境配置
+  environment: getEnv('VITE_SENTRY_ENVIRONMENT', 'production'),
   release: getEnv('npm_package_version', '0.0.1'),
+  
+  // 发送 PII 数据（如 IP 地址）
+  sendDefaultPii: true,
 
-  // 性能监控
+  // 性能监控采样率
   tracesSampleRate: parseFloat(getEnv('VITE_SENTRY_TRACES_SAMPLE_RATE', '0.1')),
 
-  // 会话监控
+  // 会话回放配置
   replaysSessionSampleRate: parseFloat(getEnv('VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE', '0.1')),
   replaysOnErrorSampleRate: parseFloat(getEnv('VITE_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE', '1.0')),
 
